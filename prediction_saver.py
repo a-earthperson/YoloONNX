@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import logging
 import os
+from confidence_evaluator import ConfidenceEvaluator
 import cv2
 
 from prediction import Predictions
@@ -14,9 +15,9 @@ class PredictionItem:
         self.predictions = predictions
 
 class PredictionSaver:
-    def __init__(self, enabled: bool, threshold: float, output_path: str):
+    def __init__(self, enabled: bool, confidence_expression: float, output_path: str):
+        self.confidence_evaluator = ConfidenceEvaluator(confidence_expression)
         self.enabled = enabled
-        self.threshold = threshold
         self.output_path = output_path
         if enabled and not os.path.isdir(output_path):
             raise ValueError(f"Output path {output_path} is not a directory.")
@@ -27,7 +28,7 @@ class PredictionSaver:
             logger.debug("Prediction saving is disabled. Skipping save.")
         elif self.queue.full():
             logger.warning("Prediction queue is full. Skipping save.")
-        elif all(p.confidence < self.threshold for p in prediction.predictions.predictions):
+        elif all(not self.confidence_evaluator.evaluate(p.label, p.confidence) for p in prediction.predictions.predictions):
             logger.debug("Prediction confidence below threshold. Skipping save.")
         else:
             await self.queue.put(prediction)

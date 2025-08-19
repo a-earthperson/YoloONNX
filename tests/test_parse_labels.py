@@ -1,6 +1,6 @@
 import unittest
 import os
-from label import parse_labels, Label
+from label import parse_labels
 
 class TestParseLabels(unittest.TestCase):
 
