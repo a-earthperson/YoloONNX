@@ -4,9 +4,9 @@ class ConfidenceEvaluator:
 
     def _parse_expression(self, expression: str) -> dict[str, tuple[float, float] | float]:
         rules = {}
-        for rule in expression.split(";"):
-            if "=" in rule:
-                label, confidence_range = rule.split("=")
+        for rule in expression.split(","):
+            if ":" in rule:
+                label, confidence_range = rule.split(":")
                 if "-" in confidence_range:
                     min_conf, max_conf = map(float, confidence_range.split("-"))
                     rules[label] = (min_conf, max_conf)
