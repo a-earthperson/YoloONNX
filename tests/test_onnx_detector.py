@@ -1,10 +1,11 @@
 import sys
 import types
 import unittest
+import unittest.mock
 
 import numpy as np
 
-from onnx_detector import ONNXDetector
+from yolorest.onnx_detector import ONNXDetector
 
 
 class FakeTensor:
@@ -54,14 +55,19 @@ class TestONNXDetector(unittest.TestCase):
     def test_detect_maps_ultralytics_results_into_contract(self):
         ultralytics_module = types.SimpleNamespace(YOLO=FakeYOLO)
         onnxruntime_module = types.SimpleNamespace(
-            get_available_providers=lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            get_available_providers=lambda: [
+                "CUDAExecutionProvider",
+                "CPUExecutionProvider",
+            ]
         )
 
         with unittest.mock.patch.dict(
             sys.modules,
             {"ultralytics": ultralytics_module, "onnxruntime": onnxruntime_module},
         ):
-            detector = ONNXDetector("model.onnx", None, conf=0.4, iou=0.5, device="cuda:1")
+            detector = ONNXDetector(
+                "model.onnx", None, conf=0.4, iou=0.5, device="cuda:1"
+            )
             predictions = detector.detect(np.zeros((4, 4, 3), dtype=np.uint8))
 
         self.assertEqual(FakeYOLO.instances[0].predict_kwargs["device"], "1")
@@ -86,7 +92,9 @@ class TestONNXDetector(unittest.TestCase):
 
     def test_explicit_labels_override_model_metadata(self):
         ultralytics_module = types.SimpleNamespace(YOLO=FakeYOLO)
-        onnxruntime_module = types.SimpleNamespace(get_available_providers=lambda: ["CPUExecutionProvider"])
+        onnxruntime_module = types.SimpleNamespace(
+            get_available_providers=lambda: ["CPUExecutionProvider"]
+        )
 
         with unittest.mock.patch.dict(
             sys.modules,
@@ -99,7 +107,9 @@ class TestONNXDetector(unittest.TestCase):
 
     def test_cuda_request_requires_cuda_provider(self):
         ultralytics_module = types.SimpleNamespace(YOLO=FakeYOLO)
-        onnxruntime_module = types.SimpleNamespace(get_available_providers=lambda: ["CPUExecutionProvider"])
+        onnxruntime_module = types.SimpleNamespace(
+            get_available_providers=lambda: ["CPUExecutionProvider"]
+        )
 
         with unittest.mock.patch.dict(
             sys.modules,
@@ -110,7 +120,9 @@ class TestONNXDetector(unittest.TestCase):
 
     def test_invalid_device_is_rejected(self):
         ultralytics_module = types.SimpleNamespace(YOLO=FakeYOLO)
-        onnxruntime_module = types.SimpleNamespace(get_available_providers=lambda: ["CPUExecutionProvider"])
+        onnxruntime_module = types.SimpleNamespace(
+            get_available_providers=lambda: ["CPUExecutionProvider"]
+        )
 
         with unittest.mock.patch.dict(
             sys.modules,

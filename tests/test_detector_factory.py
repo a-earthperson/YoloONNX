@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import patch
 
-from config import AppConfig
-from detector_factory import create_detector, resolve_backend
+from yolorest.config import AppConfig
+from yolorest.detector_factory import create_detector, resolve_backend
 
 
 def make_config(**overrides) -> AppConfig:
@@ -26,7 +26,9 @@ def make_config(**overrides) -> AppConfig:
 
 class TestDetectorFactory(unittest.TestCase):
     def test_resolve_backend_from_model_suffix(self):
-        self.assertEqual(resolve_backend(make_config(model_file="model.tflite")), "tflite")
+        self.assertEqual(
+            resolve_backend(make_config(model_file="model.tflite")), "tflite"
+        )
         self.assertEqual(resolve_backend(make_config(model_file="model.onnx")), "onnx")
 
     def test_explicit_backend_overrides_suffix(self):
@@ -39,11 +41,17 @@ class TestDetectorFactory(unittest.TestCase):
 
     def test_tflite_backend_requires_label_file(self):
         with self.assertRaises(ValueError):
-            create_detector(make_config(backend="tflite", model_file="model.tflite", label_file=None))
+            create_detector(
+                make_config(
+                    backend="tflite", model_file="model.tflite", label_file=None
+                )
+            )
 
     def test_onnx_backend_is_constructed_with_optional_labels(self):
-        config = make_config(backend="onnx", model_file="model.onnx", label_file=None, device="cuda:1")
-        with patch("detector_factory.ONNXDetector") as detector_cls:
+        config = make_config(
+            backend="onnx", model_file="model.onnx", label_file=None, device="cuda:1"
+        )
+        with patch("yolorest.detector_factory.ONNXDetector") as detector_cls:
             detector_cls.return_value = object()
             detector = create_detector(config)
 

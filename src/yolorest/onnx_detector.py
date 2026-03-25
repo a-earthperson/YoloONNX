@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from prediction import Prediction, Predictions
+from yolorest.prediction import Prediction, Predictions
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,10 @@ class ONNXDetector:
 
         available_providers = ort.get_available_providers()
         logger.info("ONNX Runtime providers available: %s", available_providers)
-        if self.predict_device != "cpu" and "CUDAExecutionProvider" not in available_providers:
+        if (
+            self.predict_device != "cpu"
+            and "CUDAExecutionProvider" not in available_providers
+        ):
             raise RuntimeError(
                 "CUDA was requested for the ONNX backend, but CUDAExecutionProvider is not available. "
                 f"Available providers: {available_providers}"
@@ -42,7 +45,9 @@ class ONNXDetector:
         try:
             from ultralytics import YOLO
         except ImportError as exc:
-            raise RuntimeError("The ONNX backend requires the ultralytics package to be installed.") from exc
+            raise RuntimeError(
+                "The ONNX backend requires the ultralytics package to be installed."
+            ) from exc
 
         logger.info(
             "Initializing ONNX detector with requested device '%s' (Ultralytics device '%s').",
@@ -50,7 +55,9 @@ class ONNXDetector:
             self.predict_device,
         )
         self.model = YOLO(model)
-        self.labels = labels or self._normalize_labels(getattr(self.model, "names", None))
+        self.labels = labels or self._normalize_labels(
+            getattr(self.model, "names", None)
+        )
         if not self.labels:
             raise ValueError(
                 "No labels were provided and the ONNX model does not expose embedded names metadata."
@@ -64,7 +71,9 @@ class ONNXDetector:
         if device.startswith("cuda:"):
             index = device.split(":", maxsplit=1)[1]
             if not index.isdigit():
-                raise ValueError(f"Invalid CUDA device '{device}'. Expected cuda or cuda:<index>.")
+                raise ValueError(
+                    f"Invalid CUDA device '{device}'. Expected cuda or cuda:<index>."
+                )
             return index
         if device.isdigit():
             return device

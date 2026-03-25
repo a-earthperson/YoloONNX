@@ -10,9 +10,9 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, HTTPException
 
-from detector_backend import DetectorBackend
-from prediction import Predictions
-from prediction_saver import PredictionItem, PredictionSaver
+from yolorest.detector_backend import DetectorBackend
+from yolorest.prediction import Predictions
+from yolorest.prediction_saver import PredictionItem, PredictionSaver
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,9 @@ def create_app(detector: DetectorBackend, prediction_saver: PredictionSaver) -> 
             raise HTTPException(status_code=400, detail="Invalid image format")
 
         predictions = detector.detect(img)
-        logger.debug("Detection completed. Found %s objects.", len(predictions.predictions))
+        logger.debug(
+            "Detection completed. Found %s objects.", len(predictions.predictions)
+        )
         prediction_item = PredictionItem(
             image=image,
             predictions=predictions,

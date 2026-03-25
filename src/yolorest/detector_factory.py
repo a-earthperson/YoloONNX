@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from config import AppConfig
-from detector_backend import DetectorBackend
-from label import parse_labels
-from onnx_detector import ONNXDetector
+from yolorest.config import AppConfig
+from yolorest.detector_backend import DetectorBackend
+from yolorest.label import parse_labels
+from yolorest.onnx_detector import ONNXDetector
 
 
 def resolve_backend(config: AppConfig) -> str:
@@ -38,7 +38,7 @@ def create_detector(config: AppConfig) -> DetectorBackend:
         if labels is None:
             raise ValueError("--label_file is required when using the TFLite backend.")
 
-        from YOLOFLite import YOLOFLite
+        from yolorest.yolo_flite import YOLOFLite
 
         return YOLOFLite(
             config.model_file,

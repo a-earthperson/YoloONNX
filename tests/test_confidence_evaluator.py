@@ -1,8 +1,9 @@
 import unittest
-from confidence_evaluator import ConfidenceEvaluator
+
+from yolorest.confidence_evaluator import ConfidenceEvaluator
+
 
 class TestConfidenceEvaluator(unittest.TestCase):
-
     def test_create(self):
         evaluator = ConfidenceEvaluator("deer:0.75,person:0.60-0.75,0.80")
         self.assertEqual(evaluator.rules["deer"], (0.75, 1))
@@ -21,5 +22,6 @@ class TestConfidenceEvaluator(unittest.TestCase):
         self.assertEqual(evaluator.evaluate("unknown", 0.80), True)
         self.assertEqual(evaluator.evaluate("unknown", 0.50), False)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

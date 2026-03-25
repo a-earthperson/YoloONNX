@@ -2,12 +2,12 @@ import asyncio
 import datetime
 import logging
 import os
-from confidence_evaluator import ConfidenceEvaluator
-import cv2
 
-from prediction import Predictions
+from yolorest.confidence_evaluator import ConfidenceEvaluator
+from yolorest.prediction import Predictions
 
 logger = logging.getLogger(__name__)
+
 
 class PredictionItem:
     def __init__(self, image: bytes, predictions: Predictions, forced: bool = False):
@@ -15,8 +15,9 @@ class PredictionItem:
         self.predictions = predictions
         self.forced = forced
 
+
 class PredictionSaver:
-    def __init__(self, enabled: bool, confidence_expression: float, output_path: str):
+    def __init__(self, enabled: bool, confidence_expression: str, output_path: str):
         self.confidence_evaluator = ConfidenceEvaluator(confidence_expression)
         self.enabled = enabled
         self.output_path = output_path
@@ -29,7 +30,10 @@ class PredictionSaver:
             logger.debug("Prediction saving is disabled. Skipping save.")
         elif self.queue.full():
             logger.warning("Prediction queue is full. Skipping save.")
-        elif not prediction.forced and all(not self.confidence_evaluator.evaluate(p.label, p.confidence) for p in prediction.predictions.predictions):
+        elif not prediction.forced and all(
+            not self.confidence_evaluator.evaluate(p.label, p.confidence)
+            for p in prediction.predictions.predictions
+        ):
             logger.debug("Prediction confidence below threshold. Skipping save.")
         else:
             await self.queue.put(prediction)
@@ -38,25 +42,36 @@ class PredictionSaver:
         while True:
             prediction = await self.queue.get()
             try:
-                timestamp = datetime.datetime.now().isoformat(timespec="milliseconds").replace(":", "-")
-                date, time = timestamp.split('T')
+                timestamp = (
+                    datetime.datetime.now()
+                    .isoformat(timespec="milliseconds")
+                    .replace(":", "-")
+                )
+                date, time = timestamp.split("T")
 
                 directory = os.path.join(self.output_path, date)
                 if not os.path.exists(directory):
                     os.makedirs(directory)
 
-                labels = "_".join({f"{p.label}-{round(p.confidence * 100)}" for p in prediction.predictions.predictions}) if prediction.predictions else "no_labels"
+                labels = (
+                    "_".join(
+                        {
+                            f"{p.label}-{round(p.confidence * 100)}"
+                            for p in prediction.predictions.predictions
+                        }
+                    )
+                    if prediction.predictions
+                    else "no_labels"
+                )
                 if prediction.forced:
                     labels = f"FORCED_{labels}"
                 filename_base = f"{time}_{labels}"
 
-                # Save image
                 image_path = os.path.join(directory, f"{filename_base}.jpg")
                 with open(image_path, "wb") as file:
                     file.write(prediction.image)
                 logger.info(f"Image saved to {image_path}")
 
-                # Save predictions as JSON
                 if len(prediction.predictions.predictions) > 0:
                     json_path = os.path.join(directory, f"{filename_base}.json")
                     with open(json_path, "w") as file:

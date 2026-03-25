@@ -1,6 +1,0 @@
-fastapi
-uvicorn
-numpy<2.0.0,>=1.23.2
-opencv-python-headless == 4.11.0.*
-pyyaml
-python-multipart

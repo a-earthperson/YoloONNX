@@ -42,7 +42,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path to the label file. Required for TFLite models and overrides embedded ONNX labels.",
     )
-    parser.add_argument("--model_file", type=str, required=True, help="Path to the model file")
+    parser.add_argument(
+        "--model_file", type=str, required=True, help="Path to the model file"
+    )
     parser.add_argument(
         "--device",
         type=str,
@@ -61,16 +63,32 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=0.45,
         help="Intersection over Union (IoU) threshold for detection",
     )
-    parser.add_argument("--enable_save", action="store_true", help="Enable saving images and predictions")
+    parser.add_argument(
+        "--enable_save",
+        action="store_true",
+        help="Enable saving images and predictions",
+    )
     parser.add_argument(
         "--save_threshold",
         type=str,
         default="0.75",
         help="Threshold for saving predictions, can be a float or an expression like deer:0.75,person:0.60-0.75,0.80",
     )
-    parser.add_argument("--save_path", type=str, default="./output", help="Folder to save images and predictions")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address to bind the API server to")
-    parser.add_argument("--port", type=int, default=8000, help="Port to bind the API server to")
+    parser.add_argument(
+        "--save_path",
+        type=str,
+        default="./output",
+        help="Folder to save images and predictions",
+    )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="Host address to bind the API server to",
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="Port to bind the API server to"
+    )
     return parser
 
 

@@ -5,8 +5,8 @@ import cv2
 import numpy as np
 from fastapi.testclient import TestClient
 
-from app import create_app
-from prediction import Prediction, Predictions
+from yolorest.app import create_app
+from yolorest.prediction import Prediction, Predictions
 
 
 class FakeDetector:
@@ -81,7 +81,13 @@ class TestApp(unittest.TestCase):
         with TestClient(app) as client:
             response = client.post(
                 "/detect",
-                files={"image": ("invalid.bin", b"not-an-image", "application/octet-stream")},
+                files={
+                    "image": (
+                        "invalid.bin",
+                        b"not-an-image",
+                        "application/octet-stream",
+                    )
+                },
             )
 
         self.assertEqual(response.status_code, 400)

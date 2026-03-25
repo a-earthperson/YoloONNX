@@ -10,7 +10,7 @@ The repository now supports two inference backends:
 The REST contract is shared across both backends:
 
 - `POST /detect` accepts multipart form-data with an `image` file field.
-- Success responses follow the `Predictions` schema from `prediction.py`.
+- Success responses follow the `Predictions` schema in `yolorest.prediction`.
 - `GET /health` returns an empty string.
 - `POST /force_save/{state}` toggles forced save behavior.
 
@@ -19,9 +19,9 @@ The REST contract is shared across both backends:
 The service can infer the backend from `--model_file`, or you can specify it explicitly:
 
 ```bash
-python main.py --backend=tflite --model_file=/models/model.tflite --label_file=/models/labels.txt --device=cpu
-python main.py --backend=onnx --model_file=/models/model.onnx --device=cpu
-python main.py --backend=onnx --model_file=/models/model.onnx --device=cuda
+uv run yolorest --backend=tflite --model_file=/models/model.tflite --label_file=/models/labels.txt --device=cpu
+uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=cpu
+uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=cuda
 ```
 
 Device semantics are backend-specific:
@@ -180,10 +180,26 @@ Notes:
 
 ## Development
 
-Create a virtualenv and install dev dependencies for the HTTP and contract tests:
+Install [uv](https://docs.astral.sh/uv/). Sync the project (core dependencies plus the `dev` group for tests and formatters), then run the test suite:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m unittest discover -s tests -v
+uv sync --group dev
+uv run python -m unittest discover -s tests -v
 ```
+
+Optional inference extras (install only what you need locally):
+
+```bash
+uv sync --group dev --extra tflite
+uv sync --group dev --extra onnx
+```
+
+Format and lint (from the synced environment, or via `uvx` without a local venv):
+
+```bash
+uv run ruff check src tests
+uv run black src tests
+# or: uvx ruff check src tests && uvx black src tests
+```
+
+The repo pins the default interpreter with [`.python-version`](.python-version) (3.11, aligned with `Dockerfile`); `uv` respects that for `uv sync` and `uv run`.

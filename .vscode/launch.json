@@ -1,15 +1,13 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File",
+            "name": "Python Debugger: yolorest",
             "type": "debugpy",
             "request": "launch",
-            "program": "main.py",
+            "module": "yolorest",
             "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
             "args": [
                 "--log_level",
                 "debug",
@@ -18,7 +16,7 @@
                 "--model_file",
                 "models/yolov8n.tflite",
                 "--enable_save"
-            ],
+            ]
         }
     ]
 }

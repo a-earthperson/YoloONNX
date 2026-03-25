@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+
 class ConfidenceEvaluator:
     def __init__(self, expression: str):
         self.rules = self._parse_expression(expression)
 
-    def _parse_expression(self, expression: str) -> dict[str, tuple[float, float] | float]:
+    def _parse_expression(
+        self, expression: str
+    ) -> dict[str, tuple[float, float] | float]:
         rules = {}
         for rule in expression.split(","):
             if ":" in rule:
@@ -15,7 +18,6 @@ class ConfidenceEvaluator:
                 else:
                     rules[label] = (float(confidence_range), 1)
             else:
-                # Default rule for any other label
                 rules["default"] = float(rule)
         return rules
 

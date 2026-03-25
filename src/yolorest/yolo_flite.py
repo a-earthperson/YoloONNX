@@ -2,15 +2,15 @@
 import logging
 import os
 import time
-from typing import Tuple, Dict
+
 import cv2
 import numpy as np
-
 from tflite_runtime.interpreter import Interpreter, load_delegate
 
-from prediction import Prediction, Predictions
+from yolorest.prediction import Prediction, Predictions
 
 logger = logging.getLogger(__name__)
+
 
 class YOLOFLite:
     """
@@ -43,7 +43,14 @@ class YOLOFLite:
     """
 
     # todo: change metadata to labels, that is a dict int, string, support both yaml and labelmap https://github.com/google-coral/tflite/blob/eced31ac01e9c2636150decef7d3c335d0feb304/python/examples/classification/classify_image.py#L55
-    def __init__(self, model: str, labels: Dict[int, str], conf: float = 0.25, iou: float = 0.45, device: str = "cpu"):
+    def __init__(
+        self,
+        model: str,
+        labels: dict[int, str],
+        conf: float = 0.25,
+        iou: float = 0.45,
+        device: str = "cpu",
+    ):
         """
         Initialize an instance of the YOLOv8TFLite class.
 
@@ -66,7 +73,6 @@ class YOLOFLite:
             self.model = Interpreter(model_path=model)
         else:
             try:
-                # Initialize the TFLite interpreter
                 device_config = {"device": device}
                 interpreter_delegate = load_delegate("libedgetpu.so.1.0", device_config)
                 logger.info("TPU found")
@@ -90,21 +96,19 @@ class YOLOFLite:
 
         self.model.allocate_tensors()
 
-        # Get input details
         input_details = self.model.get_input_details()[0]
         self.in_width, self.in_height = input_details["shape"][1:3]
         self.in_index = input_details["index"]
         self.in_scale, self.in_zero_point = input_details["quantization"]
         self.int8 = input_details["dtype"] == np.int8
 
-        # Get output details
         output_details = self.model.get_output_details()[0]
         self.out_index = output_details["index"]
         self.out_scale, self.out_zero_point = output_details["quantization"]
 
     def letterbox(
-        self, img: np.ndarray, new_shape: Tuple[int, int] = (640, 640)
-    ) -> Tuple[np.ndarray, Tuple[float, float]]:
+        self, img: np.ndarray, new_shape: tuple[int, int] = (640, 640)
+    ) -> tuple[np.ndarray, tuple[float, float]]:
         """
         Resize and pad image while maintaining aspect ratio.
 
@@ -117,20 +121,20 @@ class YOLOFLite:
             (Tuple[float, float]): Padding ratios (top/height, left/width) for coordinate adjustment.
         """
         start_time = time.time()
-        shape = img.shape[:2]  # Current shape [height, width]
+        shape = img.shape[:2]
 
-        # Scale ratio (new / old)
         r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
 
-        # Compute padding
         new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-        dw, dh = (new_shape[1] - new_unpad[0]) / 2, (new_shape[0] - new_unpad[1]) / 2  # wh padding
+        dw, dh = (new_shape[1] - new_unpad[0]) / 2, (new_shape[0] - new_unpad[1]) / 2
 
-        if shape[::-1] != new_unpad:  # Resize if needed
+        if shape[::-1] != new_unpad:
             img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
         top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
         left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-        img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
+        img = cv2.copyMakeBorder(
+            img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+        )
 
         duration_ms = (time.time() - start_time) * 1000
         logger.debug(f"letterbox took {duration_ms:.2f} ms")
@@ -148,11 +152,23 @@ class YOLOFLite:
         font_scale = 10
         for prediction in predictions.predictions:
             color = self.color_palette[prediction.label.id]
-            cv2.rectangle(img, (int(prediction.x_min), int(prediction.y_min)), (int(prediction.x_max), int(prediction.y_max)), color, 2)
+            cv2.rectangle(
+                img,
+                (int(prediction.x_min), int(prediction.y_min)),
+                (int(prediction.x_max), int(prediction.y_max)),
+                color,
+                2,
+            )
             label = f"{prediction.label.name}: {prediction.score:.2f}%"
-            (label_width, label_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)
+            (label_width, label_height), _ = cv2.getTextSize(
+                label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1
+            )
             label_x = prediction.x_min
-            label_y = prediction.y_min - 10 if prediction.y_min - 10 > label_height else prediction.y_min + 10
+            label_y = (
+                prediction.y_min - 10
+                if prediction.y_min - 10 > label_height
+                else prediction.y_min + 10
+            )
             cv2.rectangle(
                 img,
                 (int(label_x), int(label_y - label_height)),
@@ -161,10 +177,18 @@ class YOLOFLite:
                 cv2.FILLED,
             )
 
-            # Draw text
-            cv2.putText(img, label, (int(label_x), int(label_y)), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), 1, cv2.LINE_AA)
+            cv2.putText(
+                img,
+                label,
+                (int(label_x), int(label_y)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                font_scale,
+                (0, 0, 0),
+                1,
+                cv2.LINE_AA,
+            )
 
-    def preprocess(self, img: np.ndarray) -> Tuple[np.ndarray, Tuple[float, float]]:
+    def preprocess(self, img: np.ndarray) -> tuple[np.ndarray, tuple[float, float]]:
         """
         Preprocess the input image before performing inference.
 
@@ -176,12 +200,14 @@ class YOLOFLite:
             (Tuple[float, float]): Padding ratios for coordinate adjustment.
         """
         img, pad = self.letterbox(img, (self.in_width, self.in_height))
-        img = img[..., ::-1][None]  # BGR to RGB and add batch dimension (N, H, W, C) for TFLite
+        img = img[..., ::-1][None]
         img = np.ascontiguousarray(img)
         img = img.astype(np.float32)
-        return img / 255, pad  # Normalize to [0, 1]
+        return img / 255, pad
 
-    def postprocess(self, img: np.ndarray, outputs: np.ndarray, pad: Tuple[float, float]) -> Predictions:
+    def postprocess(
+        self, img: np.ndarray, outputs: np.ndarray, pad: tuple[float, float]
+    ) -> Predictions:
         """
         Process model outputs to extract and visualize detections.
 
@@ -193,19 +219,16 @@ class YOLOFLite:
         Returns:
             (np.ndarray): The input image with detections drawn on it.
         """
-        # Adjust coordinates based on padding and scale to original image size
         outputs[:, 0] -= pad[1]
         outputs[:, 1] -= pad[0]
         outputs[:, :4] *= max(img.shape)
 
-        # Transform outputs to [x, y, w, h] format
         outputs = outputs.transpose(0, 2, 1)
-        outputs[..., 0] -= outputs[..., 2] / 2  # x center to top-left x
-        outputs[..., 1] -= outputs[..., 3] / 2  # y center to top-left y
+        outputs[..., 0] -= outputs[..., 2] / 2
+        outputs[..., 1] -= outputs[..., 3] / 2
         predictions = Predictions(predictions=[], success=True)
 
         for out in outputs:
-            # Get scores and apply confidence threshold
             scores = out[:, 4:].max(-1)
             keep = scores > self.conf
             if not keep.any():
@@ -214,7 +237,6 @@ class YOLOFLite:
             boxes = out[keep, :4]
             scores = scores[keep]
             class_ids = out[keep, 4:].argmax(-1)
-            # Apply non-maximum suppression
             indices = cv2.dnn.NMSBoxes(boxes, scores, self.conf, self.iou).flatten()
             for i in indices:
                 label = self.labels[class_ids[i]]
@@ -224,7 +246,14 @@ class YOLOFLite:
                 right = left + w
                 bottom = top + h
                 predictions.predictions.append(
-                    Prediction(label=label, confidence=score, y_min=top, x_min=left, y_max=bottom, x_max=right)
+                    Prediction(
+                        label=label,
+                        confidence=score,
+                        y_min=top,
+                        x_min=left,
+                        y_max=bottom,
+                        x_max=right,
+                    )
                 )
         return predictions
 
@@ -238,25 +267,19 @@ class YOLOFLite:
         Returns:
             (List[Detection]): List of detected objects with their bounding boxes, scores and label.
         """
-        # Load and preprocess image
-
         x, pad = self.preprocess(img)
 
-        # Apply quantization if model is int8
         if self.int8:
             x = (x / self.in_scale + self.in_zero_point).astype(np.int8)
 
-        # Set input tensor and run inference
         start_time = time.time()
         self.model.set_tensor(self.in_index, x)
         self.model.invoke()
         duration_ms = (time.time() - start_time) * 1000
         logger.debug(f"detect took {duration_ms:.2f} ms")
 
-        # Get output and dequantize if necessary
         y = self.model.get_tensor(self.out_index)
         if self.int8:
             y = (y.astype(np.float32) - self.out_zero_point) * self.out_scale
 
-        # Process detections and return result
         return self.postprocess(img, y, pad)

@@ -5,10 +5,10 @@ import logging
 
 from uvicorn import Config, Server
 
-from app import create_app
-from config import AppConfig, parse_args
-from detector_factory import create_detector, resolve_backend
-from prediction_saver import PredictionSaver
+from yolorest.app import create_app
+from yolorest.config import AppConfig, parse_args
+from yolorest.detector_factory import create_detector, resolve_backend
+from yolorest.prediction_saver import PredictionSaver
 
 logger = logging.getLogger(__name__)
 
@@ -44,5 +44,9 @@ async def main(argv: list[str] | None = None):
     await server.serve()
 
 
-if __name__ == "__main__":
+def run() -> None:
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    run()

@@ -4,9 +4,8 @@ from typing import Protocol
 
 import numpy as np
 
-from prediction import Predictions
+from yolorest.prediction import Predictions
 
 
 class DetectorBackend(Protocol):
-    def detect(self, img: np.ndarray) -> Predictions:
-        ...
+    def detect(self, img: np.ndarray) -> Predictions: ...

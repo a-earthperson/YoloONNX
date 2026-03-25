@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yolorest"
+version = "0.1.0"
+description = "DeepStack-shaped REST API for YOLO object detection (TFLite/Coral and ONNX backends)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "AGPL-3.0-only"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "numpy>=1.23.2,<2",
+    "opencv-python-headless>=4.11.0,<4.12",
+    "pyyaml",
+    "python-multipart",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+tflite = ["tflite-runtime==2.14.0"]
+onnx = [
+    "onnxruntime-gpu",
+    "ultralytics",
+]
+
+[project.scripts]
+yolorest = "yolorest.main:run"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+dev = ["httpx", "ruff", "black"]
+
+[tool.ruff]
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.black]
+target-version = ["py311"]
