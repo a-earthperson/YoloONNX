@@ -1,7 +1,5 @@
 import unittest
-import os
 from confidence_evaluator import ConfidenceEvaluator
-from label import parse_labels
 
 class TestConfidenceEvaluator(unittest.TestCase):
 

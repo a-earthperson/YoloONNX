@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 class ConfidenceEvaluator:
     def __init__(self, expression: str):
         self.rules = self._parse_expression(expression)

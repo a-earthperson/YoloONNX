@@ -1,0 +1,37 @@
+ARG CUDA_IMAGE="12.6.3-cudnn-runtime-ubuntu22.04"
+FROM nvidia/cuda:${CUDA_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python-is-python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+ARG UID=10001
+RUN useradd \
+    --uid "${UID}" \
+    --create-home \
+    --shell /usr/sbin/nologin \
+    appuser
+
+COPY requirements-common.txt requirements-onnx.txt ./
+RUN python -m pip install --upgrade pip \
+    && python -m pip install --no-cache-dir -r requirements-common.txt -r requirements-onnx.txt
+
+COPY . .
+
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 CMD [ "curl", "--fail", "--silent", "http://localhost:8000/health" ]
+
+ENTRYPOINT ["python", "main.py", "--backend=onnx"]

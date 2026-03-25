@@ -11,6 +11,13 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dockerfile: ./Dockerfile
+            image_suffix: ""
+          - dockerfile: ./Dockerfile.onnx
+            image_suffix: -onnx
     steps:
     - name: Check out
       uses: actions/checkout@v4
@@ -29,14 +36,14 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ghcr.io/${{ github.repository }}
+        images: ghcr.io/${{ github.repository }}${{ matrix.image_suffix }}
     - name: Build and push
       id: docker_build
       uses: docker/build-push-action@v6
       with:
         context: .
         platforms: linux/amd64
-        file: ./Dockerfile
+        file: ${{ matrix.dockerfile }}
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
