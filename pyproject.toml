@@ -23,7 +23,6 @@ dependencies = [
 tflite = ["tflite-runtime==2.14.0"]
 onnx = [
     "onnxruntime-gpu",
-    "ultralytics",
 ]
 
 [project.scripts]

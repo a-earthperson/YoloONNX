@@ -1,44 +1,41 @@
-ARG PYTHON_VERSION="3.11.9"
-ARG CPU_ARCHITECTURE="amd64"
-ARG DEBIAN_VERSION="bookworm"
-FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION}
-ARG CPU_ARCHITECTURE
-ARG DEBIAN_VERSION
-ARG LIBEDGETPU_VERSION1="16.0"
-ARG LIBEDGETPU_VERSION2="2.17.1-1"
-ARG LIBEDGETPU_RELEASE_URL="https://github.com/feranick/libedgetpu/releases/download/${LIBEDGETPU_VERSION1}TF${LIBEDGETPU_VERSION2}/libedgetpu1-max_${LIBEDGETPU_VERSION1}tf${LIBEDGETPU_VERSION2}.${DEBIAN_VERSION}_${CPU_ARCHITECTURE}.deb"
+ARG TENSORRT_IMAGE="25.01-py3"
+FROM nvcr.io/nvidia/tensorrt:${TENSORRT_IMAGE}
 
-RUN apt-get update && apt-get install libusb-1.0-0 curl -y \
-    && curl ${LIBEDGETPU_RELEASE_URL} --output /tmp/libedgetpu.deb -L --fail \
-    && echo "yes" | dpkg -i /tmp/libedgetpu.deb \
-    && rm /tmp/libedgetpu.deb && rm -rf /var/lib/apt/lists/*
-
+ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV UV_LINK_MODE=copy
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python-is-python3 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 ARG UID=10001
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
+RUN useradd \
     --uid "${UID}" \
+    --create-home \
+    --shell /usr/sbin/nologin \
     appuser
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
-RUN uv pip install --system --no-cache ".[tflite]"
+RUN uv sync --frozen --no-dev --extra onnx
+
+ENV PATH="/app/.venv/bin:${PATH}"
 
 USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 CMD [ "curl", "--fail", "--silent", "http://localhost:8000/health" ]
+HEALTHCHECK --interval=60s --timeout=60s --start-period=60s --retries=10 CMD [ "curl", "--fail", "--silent", "http://localhost:8000/health" ]
 
-ENTRYPOINT ["yolorest"]
+ENTRYPOINT ["yolorest", "--backend=onnx"]

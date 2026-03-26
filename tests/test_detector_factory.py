@@ -12,6 +12,7 @@ def make_config(**overrides) -> AppConfig:
         "label_file": None,
         "model_file": "model.onnx",
         "device": "cpu",
+        "execution_provider": "tensorrt",
         "confidence_threshold": 0.25,
         "iou_threshold": 0.45,
         "enable_save": False,
@@ -49,11 +50,13 @@ class TestDetectorFactory(unittest.TestCase):
 
     def test_onnx_backend_is_constructed_with_optional_labels(self):
         config = make_config(
-            backend="onnx", model_file="model.onnx", label_file=None, device="cuda:1"
+            backend="onnx", model_file="model.onnx", label_file=None, device="gpu:1"
         )
         with patch("yolorest.detector_factory.ONNXDetector") as detector_cls:
             detector_cls.return_value = object()
             detector = create_detector(config)
 
-        detector_cls.assert_called_once_with("model.onnx", None, 0.25, 0.45, "cuda:1")
+        detector_cls.assert_called_once_with(
+            "model.onnx", None, 0.25, 0.45, "gpu:1", "tensorrt"
+        )
         self.assertIs(detector, detector_cls.return_value)

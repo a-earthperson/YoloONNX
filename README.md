@@ -5,7 +5,7 @@ This service exposes a DeepStack-shaped REST API for object detection so it can 
 The repository now supports two inference backends:
 
 - `tflite`: `.tflite` models on CPU or Coral EdgeTPU.
-- `onnx`: `.onnx` models through Ultralytics + ONNX Runtime on CPU or NVIDIA CUDA.
+- `onnx`: `.onnx` models through ONNX Runtime on CPU or NVIDIA GPU, with TensorRT preferred by default for GPU execution.
 
 The REST contract is shared across both backends:
 
@@ -21,25 +21,64 @@ The service can infer the backend from `--model_file`, or you can specify it exp
 ```bash
 uv run yolorest --backend=tflite --model_file=/models/model.tflite --label_file=/models/labels.txt --device=cpu
 uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=cpu
-uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=cuda
+uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=gpu
+uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=gpu:1 --execution_provider=cuda
 ```
 
 Device semantics are backend-specific:
 
 - `tflite`: `cpu`, `usb`, `usb:0`, `usb:1`, `pci`, `pci:1`, `pci:2`, ...
-- `onnx`: `cpu`, `cuda`, `cuda:0`, `cuda:1`, ...
+- `onnx`: `cpu`, `gpu`, `gpu:0`, `gpu:1`, ...
+
+For ONNX, `--execution_provider` supports `cpu`, `cuda`, and `tensorrt`. If omitted, it defaults to `tensorrt`. When `--device=cpu`, the service always uses `CPUExecutionProvider`.
 
 For ONNX, `--label_file` is optional. If omitted, the service uses embedded model names when available. A provided label file overrides embedded metadata.
 
+TensorRT tuning is controlled via environment variables instead of CLI flags:
+
+- `TRT_ENGINE_CACHE_ENABLE=true|false`
+- `TRT_ENGINE_CACHE_PATH=/tmp/ort_trt_cache`
+- `TRT_TIMING_CACHE_ENABLE=true|false`
+- `TRT_TIMING_CACHE_PATH=/tmp/ort_trt_cache`
+- `TRT_BUILD_HEURISTICS_ENABLE=true|false`
+- `TRT_BUILDER_OPTIMIZATION_LEVEL=<int>`
+- `TRT_MAX_PARTITION_ITERATIONS=<int>`
+- `TRT_MIN_SUBGRAPH_SIZE=<int>`
+- `USE_FP16=true|false`
+- `USE_INT8=true|false`
+
+Recommended TensorRT startup defaults when first-build latency matters:
+
+```env
+TRT_ENGINE_CACHE_ENABLE=true
+TRT_ENGINE_CACHE_PATH=/config/ort_trt_cache
+TRT_TIMING_CACHE_ENABLE=true
+TRT_TIMING_CACHE_PATH=/config/ort_trt_cache
+TRT_BUILD_HEURISTICS_ENABLE=true
+TRT_BUILDER_OPTIMIZATION_LEVEL=1
+TRT_MAX_PARTITION_ITERATIONS=5
+TRT_MIN_SUBGRAPH_SIZE=10
+USE_FP16=true
+USE_INT8=false
+```
+
+Notes:
+
+- Engine cache avoids rebuilding the TensorRT engine on subsequent starts.
+- Timing cache reduces tactic search time during future engine builds.
+- Lower builder optimization levels generally reduce compile time at the cost of some runtime performance.
+- `USE_INT8` should normally stay `false` unless you have a model/export path that is explicitly validated for TensorRT INT8.
+
 ## Supported ONNX scope
 
-The ONNX backend is intentionally thin and delegates model handling to Ultralytics where possible.
+The ONNX backend is intentionally thin and executes models directly with ONNX Runtime.
 
 Version 1 is intended for:
 
-- detection-focused `.onnx` models that Ultralytics can load with `YOLO(<model>.onnx)`,
-- models whose outputs resolve to standard boxes / class ids / confidences through Ultralytics,
-- CPU and NVIDIA CUDA execution through ONNX Runtime.
+- detection-focused `.onnx` models exported from Ultralytics YOLO,
+- standard detection exports whose outputs follow the usual YOLO `(batch, 4 + classes, num_predictions)` layout,
+- common end-to-end exports that emit `[x1, y1, x2, y2, score, class_id]`,
+- CPU, CUDA, and TensorRT execution through ONNX Runtime.
 
 It is not a generic executor for arbitrary non-YOLO ONNX graphs or every possible custom postprocessing topology.
 
@@ -94,7 +133,7 @@ services:
 ```yaml
 services:
   yolorest-onnx:
-    image: ghcr.io/anderssonpeter/yolorest-onnx:${YOLOREST_VERSION}
+    image: ghcr.io/a-earthperson/yolorest-onnx:${YOLOREST_VERSION}
     container_name: yolorest-onnx
     restart: on-failure
     mem_limit: 1G
@@ -117,7 +156,7 @@ Docker GPU support requires NVIDIA drivers, NVIDIA Container Toolkit, and Compos
 ```yaml
 services:
   yolorest-onnx:
-    image: ghcr.io/anderssonpeter/yolorest-onnx:${YOLOREST_VERSION}
+    image: ghcr.io/a-earthperson/yolorest-onnx:${YOLOREST_VERSION}
     container_name: yolorest-onnx
     restart: on-failure
     mem_limit: 2G
@@ -128,8 +167,19 @@ services:
       - ./yolorest/models:/models:ro
     command:
       - "--backend=onnx"
-      - "--device=cuda:0"
+      - "--device=gpu:0"
       - "--model_file=/models/yolo11n.onnx"
+    environment:
+      - TRT_ENGINE_CACHE_ENABLE=true
+      - TRT_ENGINE_CACHE_PATH=/tmp/ort_trt_cache
+      - TRT_TIMING_CACHE_ENABLE=true
+      - TRT_TIMING_CACHE_PATH=/tmp/ort_trt_cache
+      - TRT_BUILD_HEURISTICS_ENABLE=true
+      - TRT_BUILDER_OPTIMIZATION_LEVEL=1
+      - TRT_MAX_PARTITION_ITERATIONS=5
+      - TRT_MIN_SUBGRAPH_SIZE=10
+      - USE_FP16=true
+      - USE_INT8=false
     deploy:
       resources:
         reservations:
@@ -174,8 +224,8 @@ docker run -it --rm -v .:/models ultralytics/ultralytics:latest-cpu \
 
 Notes:
 
-- `nms=False` keeps postprocessing behavior closest to standard Ultralytics detection exports.
-- `nms=True` may also work if Ultralytics can normalize the exported model correctly, but it should be validated against your specific model.
+- `nms=False` is the primary supported path and keeps postprocessing behavior closest to standard YOLO detection exports.
+- `nms=True` may work for common end-to-end exports, but it should still be validated against your specific model.
 - If you need dynamic image sizes, export with `dynamic=True` and validate latency and output behavior in your target environment.
 
 ## Development

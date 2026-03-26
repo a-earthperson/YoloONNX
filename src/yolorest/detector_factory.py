@@ -55,6 +55,7 @@ def create_detector(config: AppConfig) -> DetectorBackend:
             config.confidence_threshold,
             config.iou_threshold,
             config.device,
+            config.execution_provider,
         )
 
     raise ValueError(f"Unsupported backend '{backend}'.")

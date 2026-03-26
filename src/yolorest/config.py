@@ -11,6 +11,7 @@ class AppConfig:
     label_file: str | None
     model_file: str
     device: str
+    execution_provider: str
     confidence_threshold: float
     iou_threshold: float
     enable_save: bool
@@ -49,7 +50,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--device",
         type=str,
         default="cpu",
-        help="Device to run the model on. TFLite: cpu/usb/pci. ONNX: cpu/cuda/cuda:<index>.",
+        help="Device to run the model on. TFLite: cpu/usb/pci. ONNX: cpu/gpu/gpu:<index>.",
+    )
+    parser.add_argument(
+        "--execution_provider",
+        type=str,
+        default="tensorrt",
+        choices=["cpu", "cuda", "tensorrt"],
+        help="ONNX execution provider. Defaults to tensorrt; CPU devices still use CPUExecutionProvider.",
     )
     parser.add_argument(
         "--confidence_threshold",
@@ -100,6 +108,7 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         label_file=args.label_file,
         model_file=args.model_file,
         device=args.device,
+        execution_provider=args.execution_provider,
         confidence_threshold=args.confidence_threshold,
         iou_threshold=args.iou_threshold,
         enable_save=args.enable_save,
