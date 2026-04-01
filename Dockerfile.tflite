@@ -8,34 +8,39 @@ ARG LIBEDGETPU_VERSION1="16.0"
 ARG LIBEDGETPU_VERSION2="2.17.1-1"
 ARG LIBEDGETPU_RELEASE_URL="https://github.com/feranick/libedgetpu/releases/download/${LIBEDGETPU_VERSION1}TF${LIBEDGETPU_VERSION2}/libedgetpu1-max_${LIBEDGETPU_VERSION1}tf${LIBEDGETPU_VERSION2}.${DEBIAN_VERSION}_${CPU_ARCHITECTURE}.deb"
 
-RUN apt-get update && apt-get install libusb-1.0-0 curl -y \
+RUN apt-get update && apt-get install -y --no-install-recommends libusb-1.0-0 curl gnupg libgl1 libglib2.0-0 \
     && curl ${LIBEDGETPU_RELEASE_URL} --output /tmp/libedgetpu.deb -L --fail \
     && echo "yes" | dpkg -i /tmp/libedgetpu.deb \
+    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+        | gpg --dearmor -o /usr/share/keyrings/coral-edgetpu.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/coral-edgetpu.gpg] https://packages.cloud.google.com/apt coral-edgetpu-stable main" \
+        > /etc/apt/sources.list.d/coral-edgetpu.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends edgetpu-compiler \
     && rm /tmp/libedgetpu.deb && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV UV_CACHE_DIR=/root/.cache/uv
+ENV YOLOREST_RUNTIME=tflite
+ENV YOLOREST_MODEL_CACHE_DIR=/cache/yolorest
+ENV YOLO_CONFIG_DIR=/cache/Ultralytics
 
 WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-ARG UID=10001
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}" \
-    appuser
+ARG UID=1000
+ARG GID=1000
+RUN mkdir -p /cache/yolorest /cache/Ultralytics && chown -R "${UID}:${GID}" /cache
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
 
-RUN uv pip install --system --no-cache ".[tflite]"
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv pip install --system ".[tflite]"
 
-USER appuser
+USER ${UID}:${GID}
 
 EXPOSE 8000
 

@@ -14,10 +14,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - dockerfile: ./Dockerfile
+          - dockerfile: ./Dockerfile.tflite
             image_suffix: ""
-          - dockerfile: ./Dockerfile.onnx
+          - dockerfile: ./Dockerfile
             image_suffix: -onnx
+          - dockerfile: ./Dockerfile.openvino
+            image_suffix: -openvino
     steps:
     - name: Check out
       uses: actions/checkout@v4

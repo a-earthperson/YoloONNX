@@ -7,7 +7,7 @@ from uvicorn import Config, Server
 
 from yolorest.app import create_app
 from yolorest.config import AppConfig, parse_args
-from yolorest.detector_factory import create_detector, resolve_backend
+from yolorest.detector_factory import create_detector, resolve_runtime
 from yolorest.prediction_saver import PredictionSaver
 
 logger = logging.getLogger(__name__)
@@ -24,9 +24,9 @@ def build_app(config: AppConfig):
     configure_logging(config.log_level)
     logger.debug("Parsed arguments: %s", config)
 
-    backend = resolve_backend(config)
+    runtime = resolve_runtime(config)
     detector = create_detector(config)
-    logger.info("Initialized %s detector successfully.", backend.upper())
+    logger.info("Initialized %s runtime successfully.", runtime.upper())
 
     prediction_saver = PredictionSaver(
         config.enable_save,

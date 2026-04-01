@@ -2,92 +2,113 @@
 
 This service exposes a DeepStack-shaped REST API for object detection so it can be used by Frigate and other clients expecting that contract.
 
-The repository now supports two inference backends:
+The repository now centers on lazy runtime-native export from `.pt` checkpoints. Each Docker image maps to one runtime family:
 
-- `tflite`: `.tflite` models on CPU or Coral EdgeTPU.
-- `onnx`: `.onnx` models through ONNX Runtime on CPU or NVIDIA GPU, with TensorRT preferred by default for GPU execution.
+- `tensorrt`: NVIDIA/TensorRT native `.engine` artifacts
+- `openvino`: Intel OpenVINO native `*_openvino_model/` artifacts
+- `tflite`: TensorFlow Lite `.tflite` artifacts
+- `edgetpu`: Coral EdgeTPU `.tflite` artifacts compiled for EdgeTPU
 
-The REST contract is shared across both backends:
+The REST contract is shared across all runtime profiles:
 
 - `POST /detect` accepts multipart form-data with an `image` file field.
 - Success responses follow the `Predictions` schema in `yolorest.prediction`.
 - `GET /health` returns an empty string.
 - `POST /force_save/{state}` toggles forced save behavior.
 
-## Backend selection
+## Runtime selection
 
-The service can infer the backend from `--model_file`, or you can specify it explicitly:
+The primary contract is:
+
+- pass a `.pt` checkpoint to `--model_file`
+- let the image decide the runtime via `YOLOREST_RUNTIME`
+- let the service lazily export the native artifact on first use
+
+You can still override runtime selection explicitly when running outside Docker:
 
 ```bash
-uv run yolorest --backend=tflite --model_file=/models/model.tflite --label_file=/models/labels.txt --device=cpu
-uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=cpu
-uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=gpu
-uv run yolorest --backend=onnx --model_file=/models/model.onnx --device=gpu:1 --execution_provider=cuda
+uv run yolorest --runtime=tensorrt --device=gpu:0 --model_file=/models/model.pt
+uv run yolorest --runtime=openvino --device=cpu --model_file=/models/model.pt
+uv run yolorest --runtime=tflite --device=cpu --model_file=/models/model.pt
+uv run yolorest --runtime=edgetpu --device=pci --model_file=/models/model.pt
 ```
 
-Device semantics are backend-specific:
+The service accepts pre-exported native runtime artifacts:
 
-- `tflite`: `cpu`, `usb`, `usb:0`, `usb:1`, `pci`, `pci:1`, `pci:2`, ...
-- `onnx`: `cpu`, `gpu`, `gpu:0`, `gpu:1`, ...
+- TensorRT: `.engine`
+- OpenVINO: `*_openvino_model/`
+- TFLite / EdgeTPU: `.tflite`
 
-For ONNX, `--execution_provider` supports `cpu`, `cuda`, and `tensorrt`. If omitted, it defaults to `tensorrt`. When `--device=cpu`, the service always uses `CPUExecutionProvider`.
+Device semantics are runtime-specific:
 
-For ONNX, `--label_file` is optional. If omitted, the service uses embedded model names when available. A provided label file overrides embedded metadata.
-
-TensorRT tuning is controlled via environment variables instead of CLI flags:
-
-- `TRT_ENGINE_CACHE_ENABLE=true|false`
-- `TRT_ENGINE_CACHE_PATH=/tmp/ort_trt_cache`
-- `TRT_TIMING_CACHE_ENABLE=true|false`
-- `TRT_TIMING_CACHE_PATH=/tmp/ort_trt_cache`
-- `TRT_BUILD_HEURISTICS_ENABLE=true|false`
-- `TRT_BUILDER_OPTIMIZATION_LEVEL=<int>`
-- `TRT_MAX_PARTITION_ITERATIONS=<int>`
-- `TRT_MIN_SUBGRAPH_SIZE=<int>`
-- `USE_FP16=true|false`
-- `USE_INT8=true|false`
-
-Recommended TensorRT startup defaults when first-build latency matters:
-
-```env
-TRT_ENGINE_CACHE_ENABLE=true
-TRT_ENGINE_CACHE_PATH=/config/ort_trt_cache
-TRT_TIMING_CACHE_ENABLE=true
-TRT_TIMING_CACHE_PATH=/config/ort_trt_cache
-TRT_BUILD_HEURISTICS_ENABLE=true
-TRT_BUILDER_OPTIMIZATION_LEVEL=1
-TRT_MAX_PARTITION_ITERATIONS=5
-TRT_MIN_SUBGRAPH_SIZE=10
-USE_FP16=true
-USE_INT8=false
-```
+- TensorRT: `gpu`, `gpu:0`, `gpu:1`, ...
+- OpenVINO: `cpu`, `gpu`, `gpu:0`, `npu`, ...
+- TFLite: `cpu`
+- EdgeTPU: `usb`, `usb:0`, `pci`, `pci:1`, ...
 
 Notes:
 
-- Engine cache avoids rebuilding the TensorRT engine on subsequent starts.
-- Timing cache reduces tactic search time during future engine builds.
-- Lower builder optimization levels generally reduce compile time at the cost of some runtime performance.
-- `USE_INT8` should normally stay `false` unless you have a model/export path that is explicitly validated for TensorRT INT8.
+- `--runtime` is the only runtime selector.
+- `--label_file` is an override escape hatch rather than a TFLite requirement.
 
-## Supported ONNX scope
+## Lazy export and cache
 
-The ONNX backend is intentionally thin and executes models directly with ONNX Runtime.
+When `--model_file` points to a `.pt` checkpoint, the service exports lazily on first use:
 
-Version 1 is intended for:
+- TensorRT image: `.pt` -> `.engine`
+- OpenVINO image: `.pt` -> `*_openvino_model/`
+- TFLite CPU mode: `.pt` -> `.tflite`
+- TFLite EdgeTPU mode: `.pt` -> `*_edgetpu.tflite`
 
-- detection-focused `.onnx` models exported from Ultralytics YOLO,
-- standard detection exports whose outputs follow the usual YOLO `(batch, 4 + classes, num_predictions)` layout,
-- common end-to-end exports that emit `[x1, y1, x2, y2, score, class_id]`,
-- CPU, CUDA, and TensorRT execution through ONNX Runtime.
+Exported artifacts are cached by source hash plus export settings. The cache key includes runtime-sensitive inputs such as:
 
-It is not a generic executor for arbitrary non-YOLO ONNX graphs or every possible custom postprocessing topology.
+- runtime profile and export format
+- `--export_imgsz`
+- `--export_half`
+- `--export_int8`
+- `--export_dynamic`
+- `--export_nms`
+- `--export_batch`
+- `--export_workspace`
+- calibration inputs (`--export_data`, `--export_fraction`)
+
+Important operational notes:
+
+- Docker images default `YOLOREST_MODEL_CACHE_DIR` to `/cache/yolorest`.
+- Mount `/cache` as a writable volume when running containers with `read_only: true`.
+- `--export_int8` requires `--export_data` so calibration stays deterministic.
+- TensorRT INT8 cache entries are hardware-sensitive; export on deployment-class GPUs.
+- EdgeTPU export requires an x86 Linux exporter environment.
+
+Useful export flags:
+
+```bash
+--export_imgsz=640
+--export_half
+--export_dynamic
+--export_batch=1
+--export_workspace=4
+--export_int8 --export_data=/models/data.yaml
+```
+
+## Runtime-native scope
+
+The runtime layer is now intentionally thin:
+
+- it resolves the runtime profile
+- lazily exports `.pt` sources into runtime-native artifacts
+- loads the resolved artifact with Ultralytics
+- adapts detections into the existing `Predictions` REST contract
+
+The service is intended for Ultralytics detection models and their exported runtime artifacts. It is not a generic executor for arbitrary non-YOLO graphs or custom postprocessing pipelines.
 
 ## Docker images
 
-- TFLite / Coral image: built from `Dockerfile`
-- ONNX image: built from `Dockerfile.onnx`
+- TFLite / Coral image: built from `Dockerfile.tflite`
+- TensorRT image: built from `Dockerfile`
+- OpenVINO image: built from `Dockerfile.openvino`
 
-The ONNX image is a single image family that can run on CPU or NVIDIA GPU depending on `--device` and host runtime availability.
+Each image now has a fixed runtime identity through `YOLOREST_RUNTIME`, while the model source can be either a `.pt` checkpoint or an already-exported native artifact.
 
 ### TFLite / Coral compose example
 
@@ -118,17 +139,17 @@ services:
       - TZ=Europe/Stockholm
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./yolorest/models:/models
+      - ./yolorest/models:/models:ro
+      - ./yolorest/cache:/cache
     devices:
       - /dev/apex_0:/dev/apex_0
     command:
-      - "--backend=tflite"
       - "--device=pci"
-      - "--label_file=/models/labelmap_yolov8.txt"
-      - "--model_file=/models/yolov8m_320_edgetpu.tflite"
+      - "--model_file=/models/yolo11n.pt"
+      - "--export_imgsz=320"
 ```
 
-### ONNX CPU compose example
+### TensorRT compose example
 
 ```yaml
 services:
@@ -143,13 +164,14 @@ services:
       - "no-new-privileges=true"
     volumes:
       - ./yolorest/models:/models:ro
+      - ./yolorest/cache:/cache
     command:
-      - "--backend=onnx"
-      - "--device=cpu"
-      - "--model_file=/models/yolo11n.onnx"
+      - "--device=gpu:0"
+      - "--model_file=/models/yolo11n.pt"
+      - "--export_half"
 ```
 
-### ONNX GPU compose example
+### TensorRT GPU reservation example
 
 Docker GPU support requires NVIDIA drivers, NVIDIA Container Toolkit, and Compose GPU reservations.
 
@@ -165,21 +187,11 @@ services:
       - "no-new-privileges=true"
     volumes:
       - ./yolorest/models:/models:ro
+      - ./yolorest/cache:/cache
     command:
-      - "--backend=onnx"
       - "--device=gpu:0"
-      - "--model_file=/models/yolo11n.onnx"
-    environment:
-      - TRT_ENGINE_CACHE_ENABLE=true
-      - TRT_ENGINE_CACHE_PATH=/tmp/ort_trt_cache
-      - TRT_TIMING_CACHE_ENABLE=true
-      - TRT_TIMING_CACHE_PATH=/tmp/ort_trt_cache
-      - TRT_BUILD_HEURISTICS_ENABLE=true
-      - TRT_BUILDER_OPTIMIZATION_LEVEL=1
-      - TRT_MAX_PARTITION_ITERATIONS=5
-      - TRT_MIN_SUBGRAPH_SIZE=10
-      - USE_FP16=true
-      - USE_INT8=false
+      - "--model_file=/models/yolo11n.pt"
+      - "--export_half"
     deploy:
       resources:
         reservations:
@@ -187,6 +199,33 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+```
+
+### OpenVINO GPU compose example
+
+Docker Intel GPU support requires exposing `/dev/dri` to the container. The OpenVINO Linux wheels are bundled via `openvino`, but the container still needs access to the host GPU device nodes.
+
+```yaml
+services:
+  yolorest-openvino:
+    image: ghcr.io/a-earthperson/yolorest-openvino:${YOLOREST_VERSION}
+    container_name: yolorest-openvino
+    restart: on-failure
+    mem_limit: 1G
+    cpus: 2
+    read_only: true
+    security_opt:
+      - "no-new-privileges=true"
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${GROUP_RENDER}"
+    volumes:
+      - ./yolorest/models:/models:ro
+      - ./yolorest/cache:/cache
+    command:
+      - "--device=gpu:0"
+      - "--model_file=/models/yolo11n.pt"
 ```
 
 ## Frigate config
@@ -202,31 +241,41 @@ model:
   labelmap_path: /models/labelmap_yolov8.txt
 ```
 
-## Model export guidance
+## Manual export guidance
 
 Ultralytics model source: [ultralytics/assets v8.3.0](https://github.com/ultralytics/assets/releases/tag/v8.3.0)
 
-### TFLite / EdgeTPU export
+Lazy export is the default path. Manual export is still useful when you want to prebuild runtime artifacts ahead of deployment.
+
+### TensorRT export
+
+```bash
+docker run -it --rm -v .:/models ultralytics/ultralytics:latest \
+  yolo export model=/models/<name>.pt format=engine half=True dynamic=True
+```
+
+### OpenVINO export
+
+```bash
+docker run -it --rm -v .:/models ultralytics/ultralytics:latest \
+  yolo export model=/models/<name>.pt format=openvino
+```
+
+### TFLite export
+
+```bash
+docker run -it --rm -v .:/models ultralytics/ultralytics:latest-cpu \
+  yolo export model=/models/<name>.pt format=tflite
+```
+
+### EdgeTPU export
 
 ```bash
 docker run -it --rm -v .:/models ultralytics/ultralytics:latest-cpu \
   yolo export model=/models/<name>.pt format=edgetpu
 ```
 
-### ONNX export
-
-Recommended starting point for the ONNX backend:
-
-```bash
-docker run -it --rm -v .:/models ultralytics/ultralytics:latest-cpu \
-  yolo export model=/models/<name>.pt format=onnx simplify=True dynamic=False nms=False
-```
-
-Notes:
-
-- `nms=False` is the primary supported path and keeps postprocessing behavior closest to standard YOLO detection exports.
-- `nms=True` may work for common end-to-end exports, but it should still be validated against your specific model.
-- If you need dynamic image sizes, export with `dynamic=True` and validate latency and output behavior in your target environment.
+Pre-exported `.engine`, `*_openvino_model/`, and `.tflite` paths can be passed directly to `--model_file`.
 
 ## Development
 
@@ -241,8 +290,14 @@ Optional inference extras (install only what you need locally):
 
 ```bash
 uv sync --group dev --extra tflite
-uv sync --group dev --extra onnx
+uv sync --group dev --extra tensorrt
+uv sync --group dev --extra openvino
 ```
+
+Notes:
+
+- Runtime extras are primarily intended for Linux environments that mirror the Docker images.
+- The lazy export path depends on `ultralytics`; TFLite export additionally needs TensorFlow, and native OpenVINO export needs `openvino`.
 
 Format and lint (from the synced environment, or via `uvx` without a local venv):
 

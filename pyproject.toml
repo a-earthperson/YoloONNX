@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "yolorest"
 version = "0.1.0"
-description = "DeepStack-shaped REST API for YOLO object detection (TFLite/Coral and ONNX backends)"
+description = "DeepStack-shaped REST API for YOLO object detection with lazy runtime-native export"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "AGPL-3.0-only"
@@ -20,9 +20,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-tflite = ["tflite-runtime==2.14.0"]
-onnx = [
-    "onnxruntime-gpu",
+tensorrt = [
+    "ultralytics; platform_system == 'Linux'",
+    "onnx>=1.12.0,<2.0.0; platform_system == 'Linux'",
+    "onnxslim>=0.1.71; platform_system == 'Linux'",
+    "onnxruntime-gpu; platform_system == 'Linux'",
+]
+tflite = [
+    "tflite-runtime==2.14.0",
+    "tensorflow-cpu; platform_system == 'Linux'",
+    "ultralytics; platform_system == 'Linux'",
+]
+openvino = [
+    "openvino",
+    "ultralytics; platform_system == 'Linux'",
 ]
 
 [project.scripts]
