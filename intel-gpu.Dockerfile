@@ -191,7 +191,7 @@ RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics
 COPY --from=yolo-frigate-openvino-builder /opt/intel-runtime-root/ /
 COPY --from=yolo-frigate-openvino-builder /app/.venv /app/.venv
 COPY --from=model-downloader /downloads/models /models
-
+COPY labelmap.txt /models/
 EXPOSE 8000
 
 HEALTHCHECK --interval=60s --timeout=60s --start-period=30s --retries=5 CMD [ "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)" ]
