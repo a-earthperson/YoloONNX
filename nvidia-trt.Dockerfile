@@ -39,7 +39,21 @@ for path in (site_packages / "tensorrt_libs").glob("*win*"):
     path.unlink()
 PY
 
+FROM hobbsau/aria2 AS model-downloader
+WORKDIR /downloads
+COPY <<EOF /downloads/models.list
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n.pt
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s.pt
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26m.pt 
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26l.pt 
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26x.pt 
+EOF
+RUN aria2c -j32 -k 1M -i models.list -d models
+
 FROM ${PYTHON_IMAGE} AS yolo-frigate-trt
+
+COPY --from=yolo-frigate-trt-builder /app/.venv /app/.venv
+COPY --from=model-downloader /downloads/models /models
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -60,8 +74,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-COPY --from=yolo-frigate-trt-builder /app/.venv /app/.venv
 
 RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics
 

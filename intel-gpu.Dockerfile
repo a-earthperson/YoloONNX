@@ -150,7 +150,22 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     nvidia-nvtx \
     triton
 
+FROM hobbsau/aria2 AS model-downloader
+WORKDIR /downloads
+COPY <<EOF /downloads/models.list
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n.pt
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26s.pt
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26m.pt 
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26l.pt 
+https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26x.pt 
+EOF
+RUN aria2c -j32 -k 1M -i models.list -d models
+
 FROM python:3.12-slim-bookworm AS yolo-frigate-openvino
+
+COPY --from=yolo-frigate-openvino-builder /opt/intel-runtime-root/ /
+COPY --from=yolo-frigate-openvino-builder /app/.venv /app/.venv
+COPY --from=model-downloader /downloads/models /models
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -162,9 +177,6 @@ ENV PATH="/app/.venv/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/local/lib:/opt/level-zero-runtime/lib:/opt/level-zero-runtime/lib64"
 
 WORKDIR /app
-
-COPY --from=yolo-frigate-openvino-builder /opt/intel-runtime-root/ /
-COPY --from=yolo-frigate-openvino-builder /app/.venv /app/.venv
 
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     --mount=target=/var/cache/apt,type=cache,sharing=locked \
