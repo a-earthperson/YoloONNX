@@ -61,7 +61,7 @@ https://github.com/intel/compute-runtime/releases/download/24.35.30872.22/libigd
 EOF
 RUN aria2c -j32 -k 1M -i intel-lz-debs.list -d debs
 
-FROM openvino-builder AS yolorest-openvino-builder
+FROM openvino-builder AS yolo-frigate-openvino-builder
 
 WORKDIR /build/intel-lz
 
@@ -150,21 +150,21 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     nvidia-nvtx \
     triton
 
-FROM python:3.12-slim-bookworm AS yolorest-openvino
+FROM python:3.12-slim-bookworm AS yolo-frigate-openvino
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV YOLOREST_RUNTIME=openvino
-ENV YOLOREST_MODEL_CACHE_DIR=/cache/yolorest
+ENV YOLO_FRIGATE_RUNTIME=openvino
+ENV YOLO_FRIGATE_MODEL_CACHE_DIR=/cache/yolo-frigate
 ENV YOLO_CONFIG_DIR=/cache/Ultralytics
 ENV PATH="/app/.venv/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/local/lib:/opt/level-zero-runtime/lib:/opt/level-zero-runtime/lib64"
 
 WORKDIR /app
 
-COPY --from=yolorest-openvino-builder /opt/intel-runtime-root/ /
-COPY --from=yolorest-openvino-builder /app/.venv /app/.venv
+COPY --from=yolo-frigate-openvino-builder /opt/intel-runtime-root/ /
+COPY --from=yolo-frigate-openvino-builder /app/.venv /app/.venv
 
 RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     --mount=target=/var/cache/apt,type=cache,sharing=locked \
@@ -178,10 +178,10 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
     ln -sf /usr/local/bin/python3 /usr/bin/python && \
     rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /cache/yolorest /cache/Ultralytics
+RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=60s --timeout=60s --start-period=30s --retries=5 CMD [ "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)" ]
 
-ENTRYPOINT ["yolorest"]
+ENTRYPOINT ["yolo-frigate"]

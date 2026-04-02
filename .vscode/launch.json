@@ -2,10 +2,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: yolorest",
+            "name": "Python Debugger: yolo-frigate",
             "type": "debugpy",
             "request": "launch",
-            "module": "yolorest",
+            "module": "yolo_frigate",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
             "args": [

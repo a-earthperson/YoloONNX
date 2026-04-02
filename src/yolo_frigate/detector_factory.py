@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from yolorest.config import AppConfig
-from yolorest.detector_backend import DetectorBackend
-from yolorest.label import parse_labels
-from yolorest.model_artifact import ModelArtifactManager
-from yolorest.runtime_profile import resolve_runtime_profile
-from yolorest.ultralytics_detector import UltralyticsDetector
+from yolo_frigate.config import AppConfig
+from yolo_frigate.detector_backend import DetectorBackend
+from yolo_frigate.label import parse_labels
+from yolo_frigate.model_artifact import ModelArtifactManager
+from yolo_frigate.runtime_profile import resolve_runtime_profile
+from yolo_frigate.ultralytics_detector import UltralyticsDetector
 
 
 def resolve_runtime(config: AppConfig) -> str:

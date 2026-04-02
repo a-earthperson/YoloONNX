@@ -5,10 +5,10 @@ import logging
 
 from uvicorn import Config, Server
 
-from yolorest.app import create_app
-from yolorest.config import AppConfig, parse_args
-from yolorest.detector_factory import create_detector, resolve_runtime
-from yolorest.prediction_saver import PredictionSaver
+from yolo_frigate.app import create_app
+from yolo_frigate.config import AppConfig, parse_args
+from yolo_frigate.detector_factory import create_detector, resolve_runtime
+from yolo_frigate.prediction_saver import PredictionSaver
 
 logger = logging.getLogger(__name__)
 

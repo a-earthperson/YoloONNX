@@ -5,9 +5,9 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-from yolorest.config import AppConfig
-from yolorest.model_artifact import ModelArtifactManager
-from yolorest.runtime_profile import RuntimeProfile, resolve_runtime_profile
+from yolo_frigate.config import AppConfig
+from yolo_frigate.model_artifact import ModelArtifactManager
+from yolo_frigate.runtime_profile import RuntimeProfile, resolve_runtime_profile
 
 
 def make_config(**overrides) -> AppConfig:
@@ -28,7 +28,7 @@ def make_config(**overrides) -> AppConfig:
         "export_data": None,
         "export_fraction": 1.0,
         "export_workspace": None,
-        "model_cache_dir": "/tmp/yolorest-cache",
+        "model_cache_dir": "/tmp/yolo-frigate-cache",
         "enable_save": False,
         "save_threshold": "0.75",
         "save_path": "./output",

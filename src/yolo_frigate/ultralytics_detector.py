@@ -5,8 +5,8 @@ from typing import Any
 
 import numpy as np
 
-from yolorest.prediction import Prediction, Predictions
-from yolorest.ultralytics_support import import_ultralytics_yolo
+from yolo_frigate.prediction import Prediction, Predictions
+from yolo_frigate.ultralytics_support import import_ultralytics_yolo
 
 
 class UltralyticsDetector:
@@ -87,6 +87,8 @@ class UltralyticsDetector:
             )
 
         return Predictions(predictions=predictions, success=True)
+
+
 def _to_list(value: Any) -> list[Any]:
     if hasattr(value, "tolist"):
         return value.tolist()

@@ -1,6 +1,6 @@
 ARG PYTHON_IMAGE="python:3.12-slim-bookworm"
 
-FROM ${PYTHON_IMAGE} AS yolorest-tensorrt-builder
+FROM ${PYTHON_IMAGE} AS yolo-frigate-trt-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -39,13 +39,13 @@ for path in (site_packages / "tensorrt_libs").glob("*win*"):
     path.unlink()
 PY
 
-FROM ${PYTHON_IMAGE} AS yolorest-tensorrt
+FROM ${PYTHON_IMAGE} AS yolo-frigate-trt
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV YOLOREST_RUNTIME=tensorrt
-ENV YOLOREST_MODEL_CACHE_DIR=/cache/yolorest
+ENV YOLO_FRIGATE_RUNTIME=tensorrt
+ENV YOLO_FRIGATE_MODEL_CACHE_DIR=/cache/yolo-frigate
 ENV YOLO_CONFIG_DIR=/cache/Ultralytics
 ENV PATH="/app/.venv/bin:${PATH}"
 
@@ -61,12 +61,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY --from=yolorest-tensorrt-builder /app/.venv /app/.venv
+COPY --from=yolo-frigate-trt-builder /app/.venv /app/.venv
 
-RUN mkdir -p /cache/yolorest /cache/Ultralytics
+RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=60s --timeout=60s --start-period=60s --retries=10 CMD [ "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)" ]
 
-ENTRYPOINT ["yolorest"]
+ENTRYPOINT ["yolo-frigate"]

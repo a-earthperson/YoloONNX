@@ -5,8 +5,8 @@ import cv2
 import numpy as np
 from fastapi.testclient import TestClient
 
-from yolorest.app import create_app
-from yolorest.prediction import Prediction, Predictions
+from yolo_frigate.app import create_app
+from yolo_frigate.prediction import Prediction, Predictions
 
 
 class FakeDetector:

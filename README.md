@@ -1,86 +1,73 @@
-# Yolo-rest
+# yolo-frigate
 
-This service exposes a DeepStack-shaped REST API for object detection so it can be used by Frigate and other clients expecting that contract.
+Source: **[github.com/a-earthperson/yolo-frigate](https://github.com/a-earthperson/yolo-frigate)**.
 
-The repository now centers on lazy runtime-native export from `.pt` checkpoints. Each Docker image maps to one runtime family:
+HTTP object detection for **NVR-style stacks**—most often [Frigate](https://github.com/blakeblackshear/frigate) or anything else that speaks a **DeepStack-compatible** multipart `POST /detect` API. The service wraps Ultralytics YOLO models, optionally **lazy-exporting** Ultralytics `.pt` checkpoints into each image’s native runtime (TensorRT, OpenVINO, TFLite, EdgeTPU) on first use.
 
-- `tensorrt`: NVIDIA/TensorRT native `.engine` artifacts
-- `openvino`: Intel OpenVINO native `*_openvino_model/` artifacts
-- `tflite`: TensorFlow Lite `.tflite` artifacts
-- `edgetpu`: Coral EdgeTPU `.tflite` artifacts compiled for EdgeTPU
+Typical deployments:
 
-The REST contract is shared across all runtime profiles:
+- One **GPU-class** container per inference node (NVIDIA TensorRT, Intel iGPU via OpenVINO, Coral EdgeTPU via TFLite, and so on).
+- Shared **read-only model trees** and **writable export caches** (bind mounts, named volumes, or NFS when workers are spread across machines).
+- **Orchestrator placement** so TensorRT lands on NVIDIA hosts and OpenVINO on Intel-GPU hosts—Compose on a single box, Swarm/Kubernetes when models and cache live on shared storage.
 
-- `POST /detect` accepts multipart form-data with an `image` file field.
-- Success responses follow the `Predictions` schema in `yolorest.prediction`.
-- `GET /health` returns an empty string.
-- `POST /force_save/{state}` toggles forced save behavior.
+## Runtime images
 
-## Runtime selection
+Each Docker image ships with a fixed `YOLO_FRIGATE_RUNTIME` and the dependencies for that stack only:
 
-The primary contract is:
+| Variant | Dockerfile | `YOLO_FRIGATE_RUNTIME` | Native artifacts | Typical devices |
+|---------|------------|-------------------|------------------|-----------------|
+| **NVIDIA TensorRT** | [`nvidia-trt.Dockerfile`](nvidia-trt.Dockerfile) | `tensorrt` | `.engine` | NVIDIA: `gpu`, `gpu:0`, … |
+| **Intel GPU (OpenVINO)** | [`intel-gpu.Dockerfile`](intel-gpu.Dockerfile) | `openvino` | `*_openvino_model/` | CPU; Intel GPU: `gpu`, `gpu:0`, …; NPU where supported |
+| **Coral EdgeTPU (TFLite)** | [`coral-tpu.Dockerfile`](coral-tpu.Dockerfile) | `tflite` | `.tflite` | `cpu`; Coral: `usb`, `pci`, … |
 
-- pass a `.pt` checkpoint to `--model_file`
-- let the image decide the runtime via `YOLOREST_RUNTIME`
-- let the service lazily export the native artifact on first use
+Release builds publish three images from [`.github/workflows/publish.yml`](.github/workflows/publish.yml). The **image name** is the GitHub `owner/repository` name plus a **variant suffix** that matches the Dockerfile stem (GHCR normalizes names to lowercase):
 
-You can still override runtime selection explicitly when running outside Docker:
+- `ghcr.io/a-earthperson/yolo-frigate-nvidia-trt` — from `nvidia-trt.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-intel-gpu` — from `intel-gpu.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-coral-tpu` — from `coral-tpu.Dockerfile`
+
+Forks and private mirrors use their own `owner/repo` in place of `a-earthperson/yolo-frigate`. Version **tags** (for example `v0.1.8`, `latest`) come from the GitHub release via `docker/metadata-action`. You may **retag or mirror** under other names if your registry layout requires it.
+
+## API contract
+
+Shared across all runtime profiles:
+
+- `POST /detect` — multipart form-data with an `image` file field.
+- Success responses follow the `Predictions` schema in `yolo_frigate.prediction`.
+- `GET /health` — liveness (empty body).
+- `POST /force_save/{state}` — toggles forced save behavior for debugging.
+
+## Runtime selection and devices
+
+Inside an image, runtime is determined by `YOLO_FRIGATE_RUNTIME` (set in the variant Dockerfile). Legacy images may still use `YOLOREST_RUNTIME`; the application reads both. You normally pass a `.pt` checkpoint to `--model_file` and let that image export lazily.
+
+Overrides when running outside Docker:
 
 ```bash
-uv run yolorest --runtime=tensorrt --device=gpu:0 --model_file=/models/model.pt
-uv run yolorest --runtime=openvino --device=cpu --model_file=/models/model.pt
-uv run yolorest --runtime=tflite --device=cpu --model_file=/models/model.pt
-uv run yolorest --runtime=edgetpu --device=pci --model_file=/models/model.pt
+uv run yolo-frigate --runtime=tensorrt --device=gpu:0 --model_file=/models/model.pt
+uv run yolo-frigate --runtime=openvino --device=cpu --model_file=/models/model.pt
+uv run yolo-frigate --runtime=tflite --device=cpu --model_file=/models/model.pt
+uv run yolo-frigate --runtime=edgetpu --device=pci --model_file=/models/model.pt
 ```
 
-The service accepts pre-exported native runtime artifacts:
+The installable project is **`yolo-frigate`**; the Python import package is **`yolo_frigate`** (for example `python -m yolo_frigate`).
 
-- TensorRT: `.engine`
-- OpenVINO: `*_openvino_model/`
-- TFLite / EdgeTPU: `.tflite`
+Pre-exported artifacts can be passed directly to `--model_file`: TensorRT `.engine`, OpenVINO `*_openvino_model/`, TFLite / EdgeTPU `.tflite`.
 
-Device semantics are runtime-specific:
-
-- TensorRT: `gpu`, `gpu:0`, `gpu:1`, ...
-- OpenVINO: `cpu`, `gpu`, `gpu:0`, `npu`, ...
-- TFLite: `cpu`
-- EdgeTPU: `usb`, `usb:0`, `pci`, `pci:1`, ...
-
-Notes:
-
-- `--runtime` is the only runtime selector.
-- `--label_file` is an override escape hatch rather than a TFLite requirement.
+Device strings are runtime-specific (TensorRT: `gpu`, `gpu:0`, …; OpenVINO: `cpu`, `gpu`, `npu`, …; TFLite: `cpu`; EdgeTPU: `usb`, `pci`, …). `--runtime` is the only runtime selector; `--label_file` overrides embedded class names when needed.
 
 ## Lazy export and cache
 
-When `--model_file` points to a `.pt` checkpoint, the service exports lazily on first use:
+When `--model_file` is a `.pt` checkpoint, export happens on first inference. Cached outputs live under `YOLO_FRIGATE_MODEL_CACHE_DIR` (default `/cache/yolo-frigate` in images; legacy `YOLOREST_MODEL_CACHE_DIR` and `/cache/yolorest` are still honored). The cache key includes profile, `--export_imgsz`, `--export_half`, `--export_int8`, `--export_dynamic`, `--export_nms`, `--export_batch`, `--export_workspace`, and calibration inputs.
 
-- TensorRT image: `.pt` -> `.engine`
-- OpenVINO image: `.pt` -> `*_openvino_model/`
-- TFLite CPU mode: `.pt` -> `.tflite`
-- TFLite EdgeTPU mode: `.pt` -> `*_edgetpu.tflite`
+Operational notes:
 
-Exported artifacts are cached by source hash plus export settings. The cache key includes runtime-sensitive inputs such as:
+- Mount a **writable** `/cache` (or custom `YOLO_FRIGATE_MODEL_CACHE_DIR`) whenever the container filesystem is read-only.
+- `--export_int8` requires `--export_data` for deterministic calibration.
+- TensorRT INT8 caches are **GPU-generation sensitive**; export on hardware representative of production.
+- EdgeTPU export expects an x86 Linux exporter environment.
 
-- runtime profile and export format
-- `--export_imgsz`
-- `--export_half`
-- `--export_int8`
-- `--export_dynamic`
-- `--export_nms`
-- `--export_batch`
-- `--export_workspace`
-- calibration inputs (`--export_data`, `--export_fraction`)
-
-Important operational notes:
-
-- Docker images default `YOLOREST_MODEL_CACHE_DIR` to `/cache/yolorest`.
-- Mount `/cache` as a writable volume when running containers with `read_only: true`.
-- `--export_int8` requires `--export_data` so calibration stays deterministic.
-- TensorRT INT8 cache entries are hardware-sensitive; export on deployment-class GPUs.
-- EdgeTPU export requires an x86 Linux exporter environment.
-
-Useful export flags:
+Common export flags:
 
 ```bash
 --export_imgsz=640
@@ -91,56 +78,89 @@ Useful export flags:
 --export_int8 --export_data=/models/data.yaml
 ```
 
-## Runtime-native scope
+## Deployment patterns
 
-The runtime layer is now intentionally thin:
+### What every container needs
 
-- it resolves the runtime profile
-- lazily exports `.pt` sources into runtime-native artifacts
-- loads the resolved artifact with Ultralytics
-- adapts detections into the existing `Predictions` REST contract
+- **`/models`** — readable tree with checkpoints or pre-exported artifacts and optional `labelmap.txt` (or pass `--label_file`).
+- **`/cache`** — writable export cache (omit only if you never lazy-export or you redirect `YOLO_FRIGATE_MODEL_CACHE_DIR` elsewhere).
+- **Devices** — NVIDIA Container Toolkit + GPU reservation for TensorRT; `/dev/dri` (and often `video`/`render` groups) for Intel GPU OpenVINO; Coral device nodes for EdgeTPU.
+- **Shared memory** — large `tmpfs` on `/dev/shm` can help some workloads when memory pressure appears during export or batching.
 
-The service is intended for Ultralytics detection models and their exported runtime artifacts. It is not a generic executor for arbitrary non-YOLO graphs or custom postprocessing pipelines.
+### Docker Compose (single host)
 
-## Docker images
+Minimal TensorRT service (image name ends with `-nvidia-trt` for releases from this repo):
 
-- TFLite / Coral image: built from `Dockerfile.tflite`
-- TensorRT image: built from `Dockerfile`
-- OpenVINO image: built from `Dockerfile.openvino`
+```yaml
+services:
+  yolo-frigate-tensorrt:
+    image: ghcr.io/a-earthperson/yolo-frigate-nvidia-trt:v1.2.3
+    restart: on-failure
+    read_only: true
+    security_opt:
+      - "no-new-privileges=true"
+    volumes:
+      - ./models:/models:ro
+      - ./cache:/cache
+    command:
+      - "--device=gpu:0"
+      - "--label_file=/models/labelmap.txt"
+      - "--model_file=/models/yolo11n.pt"
+      - "--export_imgsz=640"
+      - "--export_half"
+      - "--export_dynamic"
+    gpus: all
+```
 
-Each image now has a fixed runtime identity through `YOLOREST_RUNTIME`, while the model source can be either a `.pt` checkpoint or an already-exported native artifact.
+For **Swarm**, use GPU reservations on `deploy.resources` instead of `gpus: all` (Compose ignores `deploy` on non-Swarm setups).
 
-### TFLite / Coral compose example
+Intel GPU (OpenVINO image; image name ends with `-intel-gpu`):
+
+```yaml
+services:
+  yolo-frigate-intel-gpu:
+    image: ghcr.io/a-earthperson/yolo-frigate-intel-gpu:v1.2.3
+    restart: on-failure
+    read_only: true
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${GROUP_RENDER}"
+    volumes:
+      - ./models:/models:ro
+      - ./cache:/cache
+    command:
+      - "--device=gpu"
+      - "--label_file=/models/labelmap.txt"
+      - "--model_file=/models/yolo11n.pt"
+      - "--export_imgsz=320"
+      - "--export_half"
+      - "--export_dynamic"
+```
+
+Coral EdgeTPU (image name ends with `-coral-tpu`):
 
 ```yaml
 networks:
-  yolorest:
+  yolo-frigate:
     driver: bridge
     internal: true
-    driver_opts:
-      com.docker.network.bridge.name: yolorest-dsp
 
 services:
-  yolorest:
-    image: ghcr.io/anderssonpeter/yolorest:${YOLOREST_VERSION}
-    container_name: yolorest
+  yolo-frigate:
+    image: ghcr.io/a-earthperson/yolo-frigate-coral-tpu:v1.2.3
     restart: on-failure
-    mem_limit: 256M
-    cpus: 0.5
-    user: "${USER_SURVEILLANCE}:${GROUP_SURVEILLANCE}"
     read_only: true
     group_add:
       - "${GROUP_CORAL}"
     security_opt:
       - "no-new-privileges=true"
     networks:
-      yolorest:
-    environment:
-      - TZ=Europe/Stockholm
+      - yolo-frigate
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./yolorest/models:/models:ro
-      - ./yolorest/cache:/cache
+      - ./models:/models:ro
+      - ./cache:/cache
     devices:
       - /dev/apex_0:/dev/apex_0
     command:
@@ -149,133 +169,160 @@ services:
       - "--export_imgsz=320"
 ```
 
-### TensorRT compose example
+### Docker Swarm (multi-node, shared storage)
+
+Swarm is useful when **Frigate and workers sit on different nodes** or when **models and export cache** should live on NFS (or another shared filesystem) so any worker can serve the same tree.
+
+Pattern:
+
+- **Overlay network** attached to Frigate and detector services so `http://<service>:8000/detect` resolves cluster-wide.
+- **Named volumes** backed by NFS for `/models` and `/cache` so exports done on one node are visible to others (same cache key → same artifact).
+- **Placement constraints** so TensorRT runs only on GPU-labeled nodes and OpenVINO on Intel-GPU-labeled nodes.
+- **Optional** `cap_add: [CAP_PERFMON]` when you want perf counters on Intel stacks; **NVIDIA** stacks often set `NVIDIA_VISIBLE_DEVICES` / `NVIDIA_DRIVER_CAPABILITIES` for full GPU feature exposure inside the container.
+
+Illustrative `stack.yml` (replace NFS address, paths, images, and labels with yours):
 
 ```yaml
+networks:
+  cams:
+    external: true
+
+volumes:
+  models:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.1.1,rw,nfsvers=4,async
+      device: ":/path/on/nfs/to/yolo/models"
+  cache:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.1.1,rw,nfsvers=4,async
+      device: ":/path/on/nfs/to/yolo/cache"
+
+x-base: &x-base
+  cap_add:
+    - CAP_PERFMON
+  networks:
+    - cams
+  volumes:
+    - /dev/dri:/dev/dri
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/timezone:/etc/timezone:ro
+    - models:/models
+    - cache:/cache
+    - type: tmpfs
+      target: /dev/shm
+      tmpfs:
+        size: 1073741824
+
 services:
-  yolorest-onnx:
-    image: ghcr.io/a-earthperson/yolorest-onnx:${YOLOREST_VERSION}
-    container_name: yolorest-onnx
-    restart: on-failure
-    mem_limit: 1G
-    cpus: 2
-    read_only: true
-    security_opt:
-      - "no-new-privileges=true"
-    volumes:
-      - ./yolorest/models:/models:ro
-      - ./yolorest/cache:/cache
+  objectdetector:
+    <<: *x-base
+    image: ghcr.io/a-earthperson/yolo-frigate-nvidia-trt:0.1.8
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
     command:
-      - "--device=gpu:0"
-      - "--model_file=/models/yolo11n.pt"
-      - "--export_half"
-```
-
-### TensorRT GPU reservation example
-
-Docker GPU support requires NVIDIA drivers, NVIDIA Container Toolkit, and Compose GPU reservations.
-
-```yaml
-services:
-  yolorest-onnx:
-    image: ghcr.io/a-earthperson/yolorest-onnx:${YOLOREST_VERSION}
-    container_name: yolorest-onnx
-    restart: on-failure
-    mem_limit: 2G
-    read_only: true
-    security_opt:
-      - "no-new-privileges=true"
-    volumes:
-      - ./yolorest/models:/models:ro
-      - ./yolorest/cache:/cache
-    command:
-      - "--device=gpu:0"
-      - "--model_file=/models/yolo11n.pt"
+      - "--device=gpu"
+      - "--export_imgsz=640"
+      - "--export_dynamic"
+      - "--label_file=/models/labelmap.txt"
+      - "--model_file=/models/yolo26l.pt"
       - "--export_half"
     deploy:
+      placement:
+        constraints:
+          - node.labels.nvidia_gpu_compute == true
       resources:
+        limits:
+          memory: 4G
         reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-```
+          memory: 1200M
 
-### OpenVINO GPU compose example
-
-Docker Intel GPU support requires exposing `/dev/dri` to the container. The OpenVINO Linux wheels are bundled via `openvino`, but the container still needs access to the host GPU device nodes.
-
-```yaml
-services:
-  yolorest-openvino:
-    image: ghcr.io/a-earthperson/yolorest-openvino:${YOLOREST_VERSION}
-    container_name: yolorest-openvino
-    restart: on-failure
-    mem_limit: 1G
-    cpus: 2
-    read_only: true
-    security_opt:
-      - "no-new-privileges=true"
-    devices:
-      - /dev/dri:/dev/dri
-    group_add:
-      - "${GROUP_RENDER}"
-    volumes:
-      - ./yolorest/models:/models:ro
-      - ./yolorest/cache:/cache
+  yolov9-intel:
+    <<: *x-base
+    image: ghcr.io/a-earthperson/yolo-frigate-intel-gpu:0.1.7
     command:
-      - "--device=gpu:0"
-      - "--model_file=/models/yolo11n.pt"
+      - "--device=gpu"
+      - "--export_imgsz=320"
+      - "--export_dynamic"
+      - "--label_file=/models/labelmap.txt"
+      - "--model_file=/models/yolo26s.pt"
+      - "--export_half"
+    deploy:
+      mode: replicated
+      replicas: 0
+      placement:
+        constraints:
+          - node.labels.intel_gpu_compute == true
+      resources:
+        limits:
+          memory: 4096M
+        reservations:
+          memory: 1280M
 ```
 
-## Frigate config
+Keep **one writable cache** per logical deployment; concurrent writers on the same NFS path can corrupt cache entries—usually you run a **single replica** per cache volume or partition cache per replica.
+
+### Kubernetes and other orchestrators
+
+The same container arguments and volume mounts apply: mount models and cache, pass GPU device plugins or `/dev/dri` as your platform requires, and expose port `8000` to clients that call `/detect`.
+
+## Frigate
+
+Frigate’s HTTP detector expects DeepStack-style JSON; point it at this service’s **`/detect`** endpoint on the **Docker network** Frigate shares with the detector (service name resolves under Compose; under Swarm use the stack service name on the overlay).
 
 ```yaml
 detectors:
-  yolo-rest:
+  http_detector:
     type: deepstack
-    api_url: http://yolorest:8000/detect
-    api_timeout: 0.18
-
-model:
-  labelmap_path: /models/labelmap_yolov8.txt
+    api_url: http://objectdetector:8000/detect
+    api_timeout: 1.0
 ```
 
-## Manual export guidance
+Tune `api_timeout` to your SLA: sub-second values work when the model is warm; allow more time for **cold lazy export** or slow hosts. Align Frigate’s `model.labelmap_path` (or Frigate’s label file) with the classes you serve—often the same `labelmap.txt` you pass to `--label_file`.
 
-Ultralytics model source: [ultralytics/assets v8.3.0](https://github.com/ultralytics/assets/releases/tag/v8.3.0)
+## Runtime-native scope
 
-Lazy export is the default path. Manual export is still useful when you want to prebuild runtime artifacts ahead of deployment.
+The service intentionally does one thing: resolve a runtime profile, lazily export `.pt` sources when needed, load with Ultralytics, and adapt outputs to the existing `Predictions` REST contract. It is **not** a generic server for arbitrary ONNX graphs or custom postprocessing.
 
-### TensorRT export
+## Manual export (optional)
+
+Ultralytics model sources: e.g. [ultralytics/assets](https://github.com/ultralytics/assets).
+
+Lazy export is the default. Prebuilding is useful for air-gapped or reproducible rollouts.
+
+### TensorRT
 
 ```bash
 docker run -it --rm -v .:/models ultralytics/ultralytics:latest \
   yolo export model=/models/<name>.pt format=engine half=True dynamic=True
 ```
 
-### OpenVINO export
+### OpenVINO
 
 ```bash
 docker run -it --rm -v .:/models ultralytics/ultralytics:latest \
   yolo export model=/models/<name>.pt format=openvino
 ```
 
-### TFLite export
+### TFLite
 
 ```bash
 docker run -it --rm -v .:/models ultralytics/ultralytics:latest-cpu \
   yolo export model=/models/<name>.pt format=tflite
 ```
 
-### EdgeTPU export
+### EdgeTPU
 
 ```bash
 docker run -it --rm -v .:/models ultralytics/ultralytics:latest-cpu \
   yolo export model=/models/<name>.pt format=edgetpu
 ```
 
-Pre-exported `.engine`, `*_openvino_model/`, and `.tflite` paths can be passed directly to `--model_file`.
+You can pass resulting `.engine`, `*_openvino_model/`, or `.tflite` paths directly to `--model_file`.
 
 ## Development
 
@@ -297,14 +344,13 @@ uv sync --group dev --extra openvino
 Notes:
 
 - Runtime extras are primarily intended for Linux environments that mirror the Docker images.
-- The lazy export path depends on `ultralytics`; TFLite export additionally needs TensorFlow, and native OpenVINO export needs `openvino`.
+- Lazy export depends on `ultralytics`; TFLite export additionally needs TensorFlow, and native OpenVINO export needs `openvino`.
 
-Format and lint (from the synced environment, or via `uvx` without a local venv):
+Format and lint:
 
 ```bash
 uv run ruff check src tests
 uv run black src tests
-# or: uvx ruff check src tests && uvx black src tests
 ```
 
-The repo pins the default interpreter with [`.python-version`](.python-version) (3.11, aligned with `Dockerfile`); `uv` respects that for `uv sync` and `uv run`.
+The repo pins the default interpreter with [`.python-version`](.python-version); `uv` respects that for `uv sync` and `uv run`.

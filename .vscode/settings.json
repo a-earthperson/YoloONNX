@@ -7,5 +7,6 @@
         "./tests",
         "-p",
         "test_*.py"
-    ]
+    ],
+    "specstory.cloudSync.enabled": "never"
 }

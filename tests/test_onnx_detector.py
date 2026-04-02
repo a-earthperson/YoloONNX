@@ -5,7 +5,7 @@ import unittest.mock
 
 import numpy as np
 
-from yolorest.ultralytics_detector import UltralyticsDetector
+from yolo_frigate.ultralytics_detector import UltralyticsDetector
 
 
 class FakeBoxes:

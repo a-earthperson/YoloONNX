@@ -32,7 +32,9 @@ class AppConfig:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="YOLO Rest Application")
+    parser = argparse.ArgumentParser(
+        description="yolo-frigate — https://github.com/a-earthperson/yolo-frigate",
+    )
     parser.add_argument(
         "--log_level",
         type=str,
@@ -43,9 +45,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--runtime",
         type=str,
-        default=os.getenv("YOLOREST_RUNTIME", "auto"),
+        default=(
+            os.getenv("YOLO_FRIGATE_RUNTIME") or os.getenv("YOLOREST_RUNTIME") or "auto"
+        ),
         choices=["auto", "tensorrt", "openvino", "tflite", "edgetpu"],
-        help="Native runtime profile. Defaults to YOLOREST_RUNTIME or auto.",
+        help="Native runtime profile. Defaults to YOLO_FRIGATE_RUNTIME, else YOLOREST_RUNTIME (legacy), else auto.",
     )
     parser.add_argument(
         "--label_file",
@@ -130,8 +134,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model_cache_dir",
         type=str,
-        default=os.getenv("YOLOREST_MODEL_CACHE_DIR", "/tmp/yolorest-cache"),
-        help="Writable directory for lazily exported runtime artifacts.",
+        default=(
+            os.getenv("YOLO_FRIGATE_MODEL_CACHE_DIR")
+            or os.getenv("YOLOREST_MODEL_CACHE_DIR")
+            or "/tmp/yolo-frigate-cache"
+        ),
+        help="Writable directory for lazily exported runtime artifacts. "
+        "Default from YOLO_FRIGATE_MODEL_CACHE_DIR or YOLOREST_MODEL_CACHE_DIR (legacy).",
     )
     parser.add_argument(
         "--enable_save",

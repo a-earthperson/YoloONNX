@@ -22,8 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends libusb-1.0-0 cu
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV UV_CACHE_DIR=/root/.cache/uv
-ENV YOLOREST_RUNTIME=tflite
-ENV YOLOREST_MODEL_CACHE_DIR=/cache/yolorest
+ENV YOLO_FRIGATE_RUNTIME=tflite
+ENV YOLO_FRIGATE_MODEL_CACHE_DIR=/cache/yolo-frigate
 ENV YOLO_CONFIG_DIR=/cache/Ultralytics
 
 WORKDIR /app
@@ -32,7 +32,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 ARG UID=1000
 ARG GID=1000
-RUN mkdir -p /cache/yolorest /cache/Ultralytics && chown -R "${UID}:${GID}" /cache
+RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics && chown -R "${UID}:${GID}" /cache
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
@@ -46,4 +46,4 @@ EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 CMD [ "curl", "--fail", "--silent", "http://localhost:8000/health" ]
 
-ENTRYPOINT ["yolorest"]
+ENTRYPOINT ["yolo-frigate"]

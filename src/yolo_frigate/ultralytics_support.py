@@ -30,7 +30,9 @@ def _prepare_ultralytics_environment() -> None:
     if configured and _is_writable_directory(Path(configured)):
         return
 
-    cache_root = os.getenv("YOLOREST_MODEL_CACHE_DIR")
+    cache_root = os.getenv("YOLO_FRIGATE_MODEL_CACHE_DIR") or os.getenv(
+        "YOLOREST_MODEL_CACHE_DIR"
+    )
     candidates = []
     if cache_root:
         candidates.append(Path(cache_root).parent / "Ultralytics")

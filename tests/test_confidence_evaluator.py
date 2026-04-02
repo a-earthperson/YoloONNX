@@ -1,6 +1,6 @@
 import unittest
 
-from yolorest.confidence_evaluator import ConfidenceEvaluator
+from yolo_frigate.confidence_evaluator import ConfidenceEvaluator
 
 
 class TestConfidenceEvaluator(unittest.TestCase):

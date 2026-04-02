@@ -10,9 +10,9 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, HTTPException
 
-from yolorest.detector_backend import DetectorBackend
-from yolorest.prediction import Predictions
-from yolorest.prediction_saver import PredictionItem, PredictionSaver
+from yolo_frigate.detector_backend import DetectorBackend
+from yolo_frigate.prediction import Predictions
+from yolo_frigate.prediction_saver import PredictionItem, PredictionSaver
 
 logger = logging.getLogger(__name__)
 

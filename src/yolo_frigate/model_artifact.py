@@ -11,9 +11,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from yolorest.config import AppConfig
-from yolorest.runtime_profile import ModelSource, RuntimeProfile, describe_model_source
-from yolorest.ultralytics_support import (
+from yolo_frigate.config import AppConfig
+from yolo_frigate.runtime_profile import (
+    ModelSource,
+    RuntimeProfile,
+    describe_model_source,
+)
+from yolo_frigate.ultralytics_support import (
     get_ultralytics_version,
     import_ultralytics_yolo,
 )
@@ -247,6 +251,8 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
 def _normalize_tensorrt_export_device(device: str) -> str:
     if device == "gpu":
         return "0"

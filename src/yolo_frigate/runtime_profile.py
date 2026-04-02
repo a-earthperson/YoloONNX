@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from yolorest.config import AppConfig
+from yolo_frigate.config import AppConfig
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,8 @@ def _resolve_runtime_name(config: AppConfig, source: ModelSource) -> str:
         runtime_name = config.runtime
     elif source.kind == "checkpoint":
         raise ValueError(
-            "Unable to infer runtime for a .pt source model. Specify --runtime or set YOLOREST_RUNTIME."
+            "Unable to infer runtime for a .pt source model. Specify --runtime or set "
+            "YOLO_FRIGATE_RUNTIME (or legacy YOLOREST_RUNTIME)."
         )
     elif source.kind == "tflite":
         runtime_name = _resolve_tflite_family_runtime(config.device)

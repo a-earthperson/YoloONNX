@@ -3,9 +3,9 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "yolorest"
+name = "yolo-frigate"
 version = "0.1.0"
-description = "DeepStack-shaped REST API for YOLO object detection with lazy runtime-native export"
+description = "yolo-frigate: DeepStack-shaped REST API for YOLO object detection with lazy runtime-native export"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "AGPL-3.0-only"
@@ -36,8 +36,11 @@ openvino = [
     "ultralytics; platform_system == 'Linux'",
 ]
 
+[project.urls]
+Repository = "https://github.com/a-earthperson/yolo-frigate"
+
 [project.scripts]
-yolorest = "yolorest.main:run"
+yolo-frigate = "yolo_frigate.main:run"
 
 [tool.setuptools.package-dir]
 "" = "src"
@@ -46,7 +49,7 @@ yolorest = "yolorest.main:run"
 where = ["src"]
 
 [dependency-groups]
-dev = ["httpx", "ruff", "black"]
+dev = ["httpx", "pytest", "pytest-cov", "ruff", "black"]
 
 [tool.ruff]
 target-version = "py311"

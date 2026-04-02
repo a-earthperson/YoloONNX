@@ -3,8 +3,8 @@ import datetime
 import logging
 import os
 
-from yolorest.confidence_evaluator import ConfidenceEvaluator
-from yolorest.prediction import Predictions
+from yolo_frigate.confidence_evaluator import ConfidenceEvaluator
+from yolo_frigate.prediction import Predictions
 
 logger = logging.getLogger(__name__)
 

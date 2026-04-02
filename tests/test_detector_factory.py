@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import patch
 
-from yolorest.config import AppConfig
-from yolorest.detector_factory import create_detector, resolve_runtime
-from yolorest.model_artifact import ResolvedModelArtifact
+from yolo_frigate.config import AppConfig
+from yolo_frigate.detector_factory import create_detector, resolve_runtime
+from yolo_frigate.model_artifact import ResolvedModelArtifact
 
 
 def make_config(**overrides) -> AppConfig:
@@ -24,7 +24,7 @@ def make_config(**overrides) -> AppConfig:
         "export_data": None,
         "export_fraction": 1.0,
         "export_workspace": None,
-        "model_cache_dir": "/tmp/yolorest-cache",
+        "model_cache_dir": "/tmp/yolo-frigate-cache",
         "enable_save": False,
         "save_threshold": "0.75",
         "save_path": "./output",
@@ -90,8 +90,10 @@ class TestDetectorFactory(unittest.TestCase):
         )
 
         with (
-            patch("yolorest.detector_factory.parse_labels", return_value={0: "person"}),
-            patch("yolorest.detector_factory.UltralyticsDetector") as detector_cls,
+            patch(
+                "yolo_frigate.detector_factory.parse_labels", return_value={0: "person"}
+            ),
+            patch("yolo_frigate.detector_factory.UltralyticsDetector") as detector_cls,
         ):
             detector_cls.return_value = object()
             detector = create_detector(config, artifact_manager=manager)

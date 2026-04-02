@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from yolorest.label import parse_labels
+from yolo_frigate.label import parse_labels
 
 TEST_DIR = os.path.dirname(__file__)
 

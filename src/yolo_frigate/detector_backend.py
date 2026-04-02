@@ -4,7 +4,7 @@ from typing import Protocol
 
 import numpy as np
 
-from yolorest.prediction import Predictions
+from yolo_frigate.prediction import Predictions
 
 
 class DetectorBackend(Protocol):
