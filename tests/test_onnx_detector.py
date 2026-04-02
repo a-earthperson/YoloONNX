@@ -89,6 +89,18 @@ class TestUltralyticsDetector(unittest.TestCase):
 
         self.assertEqual(FakeYOLO.instances[0].predict_calls[0]["device"], "intel:gpu")
 
+    def test_openvino_runtime_normalizes_cpu_device(self):
+        ultralytics_module = types.SimpleNamespace(YOLO=FakeYOLO)
+        with unittest.mock.patch.dict(sys.modules, {"ultralytics": ultralytics_module}):
+            detector = UltralyticsDetector(
+                "model_openvino_model",
+                runtime="openvino",
+                device="cpu",
+            )
+            detector.detect(np.zeros((4, 4, 3), dtype=np.uint8))
+
+        self.assertEqual(FakeYOLO.instances[0].predict_calls[0]["device"], "intel:cpu")
+
     def test_tflite_runtime_does_not_force_predict_device(self):
         ultralytics_module = types.SimpleNamespace(YOLO=FakeYOLO)
         with unittest.mock.patch.dict(sys.modules, {"ultralytics": ultralytics_module}):
