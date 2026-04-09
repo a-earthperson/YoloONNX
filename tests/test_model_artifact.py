@@ -131,7 +131,12 @@ class TestModelArtifactManager(unittest.TestCase):
                 self.assertEqual(len(FakeYOLOE.export_calls), 1)
                 self.assertEqual(
                     FakeYOLOE.set_classes_calls,
-                    [(str(Path(first.path).parents[0] / "model.pt"), ["person", "package"])],
+                    [
+                        (
+                            str(Path(first.path).parents[0] / "model.pt"),
+                            ["person", "package"],
+                        )
+                    ],
                 )
                 self.assertEqual(FakeYOLOE.val_calls, [])
                 self.assertTrue(

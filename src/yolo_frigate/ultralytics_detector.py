@@ -72,7 +72,9 @@ class UltralyticsDetector:
         xyxy = _to_list(getattr(boxes, "xyxy", []))
         class_ids = _to_list(getattr(boxes, "cls", []))
         confidences = _to_list(getattr(boxes, "conf", []))
-        names = _class_names_to_map(self.class_names) or getattr(result, "names", {}) or {}
+        names = (
+            _class_names_to_map(self.class_names) or getattr(result, "names", {}) or {}
+        )
 
         predictions = []
         for coordinates, class_id, confidence in zip(xyxy, class_ids, confidences):
