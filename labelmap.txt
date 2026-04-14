@@ -1,18 +1,3 @@
-0  package
-1  box
-2  mail
-3  letter
-4  envelope
-6  cat
-7  dog
-8  man
-9  woman
-10 child
-11 dogwalker
-12 hobo
-13 cop
-14 car
-15 track
-16 bus
-17 bicycle
-18 motorcycle
+person
+cat
+package
