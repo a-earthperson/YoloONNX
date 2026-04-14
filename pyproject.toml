@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yolo-frigate"
-version = "0.2.9"
+version = "0.3.5"
 description = "yolo-frigate: DeepStack-shaped REST API for YOLO object detection with lazy runtime-native export"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -53,6 +53,9 @@ yolo-frigate = "yolo_frigate.main:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+sidecar = ["static/*.html", "static/*.js", "static/*.css"]
 
 [dependency-groups]
 dev = ["httpx", "pytest", "pytest-cov", "ruff", "black"]

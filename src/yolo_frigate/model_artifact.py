@@ -77,10 +77,8 @@ class ModelArtifactManager:
     ) -> ExportRequest:
         self._validate_export_config(config, runtime_profile)
 
-        source_path = self._resolve_checkpoint_source(source)
-        export_data = self._resolve_export_data(
-            config, runtime_profile, class_names
-        )
+        source_path = self._resolve_checkpoint_source(source, class_names)
+        export_data = self._resolve_export_data(config, runtime_profile, class_names)
 
         resolved_source = ModelSource(
             path=source_path,
@@ -116,15 +114,25 @@ class ModelArtifactManager:
             source_sha256=source_sha256,
         )
 
-    def _resolve_checkpoint_source(self, source: ModelSource) -> Path:
+    def _resolve_checkpoint_source(
+        self,
+        source: ModelSource,
+        class_names: list[str] | None,
+    ) -> Path:
         if source.kind != "checkpoint":
             return source.path.expanduser().resolve()
 
         source_path = source.path.expanduser()
+        if not class_names:
+            prompt_free_candidate = _resolve_prompt_free_checkpoint_candidate(
+                source_path
+            )
+            if prompt_free_candidate is not None:
+                source_path = prompt_free_candidate
         if source_path.is_file():
             return source_path.resolve()
 
-        return resolve_ultralytics_checkpoint(str(source.path))
+        return resolve_ultralytics_checkpoint(str(source_path))
 
     def _ensure_exported(self, request: ExportRequest) -> Path:
         request.cache_root.mkdir(parents=True, exist_ok=True)
@@ -176,6 +184,8 @@ class ModelArtifactManager:
         model = yolo_cls(str(staged_source))
         if request.class_names:
             model.set_classes(list(request.class_names))
+        elif _uses_prompt_free_head(model):
+            _strip_prompt_embeddings(model)
         model.export(**request.export_args)
 
         artifact_path = self._find_export_artifact(request)
@@ -274,6 +284,7 @@ class ModelArtifactManager:
             ensure_open_images_v7_validation_dataset(
                 Path(config.model_cache_dir),
                 class_names,
+                config.export_calibration_max_samples,
             )
         )
 
@@ -307,6 +318,43 @@ def _single_match(paths) -> Path | None:
     if not matches:
         return None
     return matches[0]
+
+
+def _resolve_prompt_free_checkpoint_candidate(source_path: Path) -> Path | None:
+    if source_path.suffix.lower() != ".pt":
+        return None
+
+    stem = source_path.stem
+    lower_stem = stem.lower()
+    if "yoloe" not in lower_stem or lower_stem.endswith("-pf"):
+        return None
+
+    candidate = source_path.with_name(f"{stem}-pf{source_path.suffix}")
+    if source_path.is_file() and not candidate.is_file():
+        return None
+    return candidate
+
+
+def _uses_prompt_free_head(model: Any) -> bool:
+    head = _resolve_yoloe_head(model)
+    return head is not None and hasattr(head, "lrpc")
+
+
+def _strip_prompt_embeddings(model: Any) -> None:
+    inner_model = getattr(model, "model", None)
+    if inner_model is not None and hasattr(inner_model, "pe"):
+        delattr(inner_model, "pe")
+
+
+def _resolve_yoloe_head(model: Any) -> Any | None:
+    inner_model = getattr(model, "model", None)
+    layers = getattr(inner_model, "model", None)
+    if layers is None:
+        return None
+    try:
+        return layers[-1]
+    except (IndexError, KeyError, TypeError):
+        return None
 
 
 def _sha256_file(path: Path) -> str:

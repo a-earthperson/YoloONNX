@@ -2691,7 +2691,7 @@ wheels = [
 
 [[package]]
 name = "yolo-frigate"
-version = "0.2.7"
+version = "0.2.9"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

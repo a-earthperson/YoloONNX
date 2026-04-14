@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, HTTPException
 
+from sidecar import install_live_sidecar
 from yolo_frigate.detector_backend import DetectorBackend
 from yolo_frigate.prediction import Predictions
 from yolo_frigate.prediction_saver import PredictionItem, PredictionSaver
@@ -30,6 +31,7 @@ def create_app(detector: DetectorBackend, prediction_saver: PredictionSaver) -> 
 
     app = FastAPI(lifespan=lifespan)
     app.state.force_save = False
+    install_live_sidecar(app)
 
     @app.get("/")
     def root():

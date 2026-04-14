@@ -4,6 +4,10 @@ import argparse
 import os
 from dataclasses import dataclass
 
+DEFAULT_EXPORT_CALIBRATION_MAX_SAMPLES = 512
+MIN_EXPORT_CALIBRATION_MAX_SAMPLES = 1
+MAX_EXPORT_CALIBRATION_MAX_SAMPLES = 4096
+
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -22,6 +26,7 @@ class AppConfig:
     export_batch: int
     export_data: str | None
     export_fraction: float
+    export_calibration_max_samples: int
     export_workspace: float | None
     model_cache_dir: str
     enable_save: bool
@@ -29,6 +34,23 @@ class AppConfig:
     save_path: str
     host: str
     port: int
+
+
+def _bounded_int(name: str, minimum: int, maximum: int):
+    def parse(value: str) -> int:
+        try:
+            parsed = int(value)
+        except (
+            ValueError
+        ) as exc:  # pragma: no cover - argparse formats the final error.
+            raise argparse.ArgumentTypeError(f"{name} must be an integer.") from exc
+        if not minimum <= parsed <= maximum:
+            raise argparse.ArgumentTypeError(
+                f"{name} must be between {minimum} and {maximum}."
+            )
+        return parsed
+
+    return parse
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -53,7 +75,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--label_file",
         type=str,
         default=None,
-        help="Optional path to the YOLOE class vocabulary file. Entries are passed to set_classes() before export.",
+        help="Optional path to the YOLOE class vocabulary file. Entries are passed to set_classes() before export. When omitted for named YOLOE checkpoints, yolo-frigate prefers the matching prompt-free -pf checkpoint.",
     )
     parser.add_argument(
         "--model_file",
@@ -124,6 +146,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Dataset fraction used for quantization calibration.",
     )
     parser.add_argument(
+        "--export_calibration_max_samples",
+        type=_bounded_int(
+            "export_calibration_max_samples",
+            MIN_EXPORT_CALIBRATION_MAX_SAMPLES,
+            MAX_EXPORT_CALIBRATION_MAX_SAMPLES,
+        ),
+        default=DEFAULT_EXPORT_CALIBRATION_MAX_SAMPLES,
+        help=(
+            "Maximum number of Open Images calibration samples to materialize "
+            "when auto-bootstrapping INT8 export data."
+        ),
+    )
+    parser.add_argument(
         "--export_workspace",
         type=float,
         default=None,
@@ -185,6 +220,7 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         export_batch=args.export_batch,
         export_data=args.export_data,
         export_fraction=args.export_fraction,
+        export_calibration_max_samples=args.export_calibration_max_samples,
         export_workspace=args.export_workspace,
         model_cache_dir=args.model_cache_dir,
         enable_save=args.enable_save,

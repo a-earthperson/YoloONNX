@@ -23,6 +23,7 @@ def make_config(**overrides) -> AppConfig:
         "export_batch": 1,
         "export_data": None,
         "export_fraction": 1.0,
+        "export_calibration_max_samples": 512,
         "export_workspace": None,
         "model_cache_dir": "/tmp/yolo-frigate-cache",
         "enable_save": False,

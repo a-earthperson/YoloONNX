@@ -93,6 +93,29 @@ class TestApp(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"detail": "Invalid image format"})
 
+    def test_live_view_is_served(self):
+        saver = RecordingPredictionSaver()
+        app = create_app(FakeDetector(), saver)
+
+        with TestClient(app) as client:
+            response = client.get("/live")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers["content-type"])
+        self.assertIn("Live detection", response.text)
+        self.assertIn("/live/assets/live.js", response.text)
+
+    def test_live_assets_are_served(self):
+        saver = RecordingPredictionSaver()
+        app = create_app(FakeDetector(), saver)
+
+        with TestClient(app) as client:
+            response = client.get("/live/assets/live.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("javascript", response.headers["content-type"])
+        self.assertIn("class LiveDetectorApp", response.text)
+
     def test_force_save_flag_is_propagated(self):
         saver = RecordingPredictionSaver()
         app = create_app(FakeDetector(), saver)

@@ -27,6 +27,7 @@ def make_config(**overrides) -> AppConfig:
         "export_batch": 1,
         "export_data": None,
         "export_fraction": 1.0,
+        "export_calibration_max_samples": 512,
         "export_workspace": None,
         "model_cache_dir": "/tmp/yolo-frigate-cache",
         "enable_save": False,
@@ -50,6 +51,11 @@ class FakeYOLOE:
         self.model_file = model_file
         FakeYOLOE.init_calls.append(model_file)
         source_path = Path(model_file)
+        head = types.SimpleNamespace()
+        self.model = types.SimpleNamespace(model=[head])
+        if source_path.name.endswith("-pf.pt"):
+            head.lrpc = object()
+            self.model.pe = object()
         if source_path.is_file():
             self.ckpt_path = str(source_path)
         elif FakeYOLOE.download_dir is not None:
@@ -64,6 +70,10 @@ class FakeYOLOE:
         FakeYOLOE.set_classes_calls.append((self.model_file, list(classes)))
 
     def export(self, **kwargs):
+        if Path(self.model_file).name.endswith("-pf.pt") and hasattr(self.model, "pe"):
+            raise AssertionError(
+                "prompt-free exports must not re-fuse prompt embeddings"
+            )
         FakeYOLOE.export_calls.append((self.model_file, kwargs))
         source_path = Path(self.model_file)
         parent = source_path.parent
@@ -244,6 +254,35 @@ class TestModelArtifactManager(unittest.TestCase):
         self.assertEqual(FakeYOLOE.init_calls[0], "yoloe-26l-seg.pt")
         self.assertEqual(Path(FakeYOLOE.export_calls[0][0]).name, "yoloe-26l-seg.pt")
 
+    def test_named_checkpoint_prefers_prompt_free_variant_without_label_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            download_dir = Path(tmpdir) / "downloads"
+            manager = ModelArtifactManager()
+            ultralytics_module = types.SimpleNamespace(
+                YOLOE=FakeYOLOE, __version__="8.3.0"
+            )
+            FakeYOLOE.download_dir = download_dir
+
+            with unittest.mock.patch.dict(
+                sys.modules, {"ultralytics": ultralytics_module}
+            ):
+                resolved = manager.resolve(
+                    make_config(
+                        runtime="tensorrt",
+                        model_file="yoloe-26l-seg.pt",
+                        model_cache_dir=str(cache_dir),
+                    ),
+                    RuntimeProfile("tensorrt", "engine"),
+                    None,
+                )
+                self.assertTrue(Path(resolved.path).is_file())
+                self.assertTrue((download_dir / "yoloe-26l-seg-pf.pt").is_file())
+
+        self.assertEqual(FakeYOLOE.init_calls[0], "yoloe-26l-seg-pf.pt")
+        self.assertEqual(Path(FakeYOLOE.export_calls[0][0]).name, "yoloe-26l-seg-pf.pt")
+        self.assertEqual(FakeYOLOE.set_classes_calls, [])
+
     def test_cache_key_changes_when_gpu_model_changes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "model.pt"
@@ -309,7 +348,9 @@ class TestModelArtifactManager(unittest.TestCase):
             ultralytics_module = types.SimpleNamespace(
                 YOLOE=FakeYOLOE, __version__="8.3.0"
             )
-            calibration_yaml = Path(tmpdir) / "datasets" / "open-images-v7" / "data.yaml"
+            calibration_yaml = (
+                Path(tmpdir) / "datasets" / "open-images-v7" / "data.yaml"
+            )
 
             with (
                 unittest.mock.patch.dict(
@@ -325,12 +366,72 @@ class TestModelArtifactManager(unittest.TestCase):
                 )
                 self.assertTrue(Path(resolved.path).is_file())
 
-        ensure_dataset.assert_called_once_with(cache_dir, ["person"])
+        ensure_dataset.assert_called_once_with(cache_dir, ["person"], 512)
         self.assertEqual(
             FakeYOLOE.export_calls[-1][1]["data"],
             str(calibration_yaml),
         )
         self.assertEqual(FakeYOLOE.export_calls[-1][1]["fraction"], 1.0)
+
+    def test_cache_key_changes_when_calibration_sample_cap_changes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir) / "model.pt"
+            model_path.write_bytes(b"weights")
+            cache_dir = Path(tmpdir) / "cache"
+            manager = ModelArtifactManager()
+            ultralytics_module = types.SimpleNamespace(
+                YOLOE=FakeYOLOE, __version__="8.3.0"
+            )
+
+            def fake_dataset_path(cache_root, class_names, max_samples):
+                return (
+                    Path(cache_root)
+                    / "datasets"
+                    / f"open-images-{max_samples}"
+                    / "data.yaml"
+                )
+
+            with (
+                unittest.mock.patch.dict(
+                    sys.modules, {"ultralytics": ultralytics_module}
+                ),
+                unittest.mock.patch(
+                    "yolo_frigate.model_artifact.ensure_open_images_v7_validation_dataset",
+                    side_effect=fake_dataset_path,
+                ) as ensure_dataset,
+            ):
+                first = manager.resolve(
+                    make_config(
+                        runtime="tensorrt",
+                        model_file=str(model_path),
+                        model_cache_dir=str(cache_dir),
+                        export_int8=True,
+                        export_calibration_max_samples=256,
+                    ),
+                    RuntimeProfile("tensorrt", "engine"),
+                    ["person"],
+                )
+                second = manager.resolve(
+                    make_config(
+                        runtime="tensorrt",
+                        model_file=str(model_path),
+                        model_cache_dir=str(cache_dir),
+                        export_int8=True,
+                        export_calibration_max_samples=1024,
+                    ),
+                    RuntimeProfile("tensorrt", "engine"),
+                    ["person"],
+                )
+
+        self.assertNotEqual(first.path, second.path)
+        self.assertEqual(len(FakeYOLOE.export_calls), 2)
+        self.assertEqual(
+            ensure_dataset.call_args_list,
+            [
+                unittest.mock.call(cache_dir, ["person"], 256),
+                unittest.mock.call(cache_dir, ["person"], 1024),
+            ],
+        )
 
     def test_explicit_export_data_bypasses_open_images_bootstrap(self):
         with tempfile.TemporaryDirectory() as tmpdir:

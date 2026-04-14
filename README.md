@@ -67,7 +67,7 @@ When `--model_file` is a `.pt` checkpoint, export happens on first inference. Ca
 Operational notes:
 
 - Mount a **writable** `/cache` (or custom `YOLO_FRIGATE_MODEL_CACHE_DIR`) whenever the container filesystem is read-only.
-- `--export_int8` uses `--export_data` when provided; otherwise TensorRT, OpenVINO, and TFLite bootstrap a cached deterministic Open Images V7 validation subset derived from `--label_file` (up to 512 images). Labels not present in Open Images are ignored with a warning.
+- `--export_int8` uses `--export_data` when provided; otherwise TensorRT, OpenVINO, and TFLite bootstrap a cached deterministic Open Images V7 validation subset derived from `--label_file`. `--export_calibration_max_samples` controls the subset size (default `512`, valid range `1..4096`). Labels not present in Open Images are ignored with a warning.
 - TensorRT INT8 caches are **GPU-generation sensitive**; export on hardware representative of production.
 - EdgeTPU export expects an x86 Linux exporter environment.
 
@@ -79,6 +79,7 @@ Common export flags:
 --export_dynamic
 --export_batch=1
 --export_workspace=4
+--export_calibration_max_samples=512
 --export_int8 --export_data=/models/data.yaml
 ```
 

@@ -18,6 +18,8 @@ import cv2
 import numpy as np
 import yaml
 
+from yolo_frigate.config import DEFAULT_EXPORT_CALIBRATION_MAX_SAMPLES
+
 try:
     from PIL import Image
 except ImportError:  # pragma: no cover - Pillow is optional outside export runtimes.
@@ -25,16 +27,15 @@ except ImportError:  # pragma: no cover - Pillow is optional outside export runt
 
 logger = logging.getLogger(__name__)
 
-_ANNOTATIONS_URL = "https://storage.googleapis.com/openimages/v5/validation-annotations-bbox.csv"
+_ANNOTATIONS_URL = (
+    "https://storage.googleapis.com/openimages/v5/validation-annotations-bbox.csv"
+)
 _BOXABLE_CLASS_URL = (
     "https://storage.googleapis.com/openimages/v7/oidv7-class-descriptions-boxable.csv"
 )
-_CALIBRATION_MAX_SAMPLES = 512
 _CALIBRATION_SEED = 0
 _DATASET_DIRNAME = "open-images-v7-validation-yolo-v5"
-_IMAGE_METADATA_URL = (
-    "https://storage.googleapis.com/openimages/2018_04/validation/validation-images-with-rotation.csv"
-)
+_IMAGE_METADATA_URL = "https://storage.googleapis.com/openimages/2018_04/validation/validation-images-with-rotation.csv"
 _IMAGE_DOWNLOAD_TIMEOUT_SECONDS = 30
 _IMAGE_DOWNLOAD_WORKERS = 8
 _USER_AGENT = "yolo-frigate-open-images-bootstrap/1.0"
@@ -67,12 +68,13 @@ class ImageRecord:
 def ensure_open_images_v7_validation_dataset(
     cache_root: Path,
     requested_classes: list[str] | tuple[str, ...] | None = None,
+    max_samples: int = DEFAULT_EXPORT_CALIBRATION_MAX_SAMPLES,
 ) -> Path:
     base_root = cache_root.expanduser().resolve() / "datasets" / _DATASET_DIRNAME
     metadata_root = base_root / "metadata"
     class_index = _load_open_images_boxable_class_index(metadata_root)
     selected_classes = _resolve_selected_classes(requested_classes, class_index)
-    dataset_root = base_root / _selection_key(selected_classes)
+    dataset_root = base_root / _selection_key(selected_classes, max_samples)
     export_root = dataset_root / "yolo"
     data_yaml = export_root / "data.yaml"
     if data_yaml.is_file():
@@ -94,6 +96,7 @@ def ensure_open_images_v7_validation_dataset(
                 export_root=staging_root,
                 class_index=class_index,
                 selected_classes=selected_classes,
+                max_samples=max_samples,
             )
             _write_dataset_yaml(
                 path=staging_root / "data.yaml",
@@ -115,12 +118,13 @@ def _build_open_images_subset(
     export_root: Path,
     class_index: ClassIndex,
     selected_classes: list[str] | None,
+    max_samples: int,
 ) -> list[str]:
     logger.info(
         "Bootstrapping Open Images V7 validation detections for INT8 calibration under %s using classes=%s max_samples=%s.",
         export_root,
         selected_classes or "all boxable classes",
-        _CALIBRATION_MAX_SAMPLES,
+        max_samples,
     )
 
     selected_label_ids = None
@@ -131,7 +135,7 @@ def _build_open_images_subset(
 
     detections_by_image = _load_detections(metadata_root, selected_label_ids)
     candidate_image_ids = _shuffled_image_ids(detections_by_image)
-    sampled_image_ids = candidate_image_ids[:_CALIBRATION_MAX_SAMPLES]
+    sampled_image_ids = candidate_image_ids[:max_samples]
     image_records = _load_image_records(metadata_root, candidate_image_ids)
     classes = _resolve_dataset_classes(
         selected_classes=selected_classes,
@@ -253,12 +257,16 @@ def _load_detections(
             )
 
     if not detections_by_image:
-        raise ValueError("Open Images calibration bootstrap found no matching detections.")
+        raise ValueError(
+            "Open Images calibration bootstrap found no matching detections."
+        )
     return dict(detections_by_image)
 
 
 def _sample_image_ids(detections_by_image: dict[str, list[Detection]]) -> list[str]:
-    return _shuffled_image_ids(detections_by_image)[:_CALIBRATION_MAX_SAMPLES]
+    return _shuffled_image_ids(detections_by_image)[
+        :DEFAULT_EXPORT_CALIBRATION_MAX_SAMPLES
+    ]
 
 
 def _shuffled_image_ids(detections_by_image: dict[str, list[Detection]]) -> list[str]:
@@ -316,7 +324,9 @@ def _resolve_dataset_classes(
         }
     )
     if not observed:
-        raise ValueError("No Open Images classes were observed in the sampled calibration subset.")
+        raise ValueError(
+            "No Open Images classes were observed in the sampled calibration subset."
+        )
     return observed
 
 
@@ -335,7 +345,9 @@ def _materialize_dataset(
     labels_dir.mkdir(parents=True, exist_ok=True)
 
     class_to_index = {class_name: index for index, class_name in enumerate(classes)}
-    target_count = min(target_count or _CALIBRATION_MAX_SAMPLES, len(image_ids))
+    target_count = min(
+        target_count or DEFAULT_EXPORT_CALIBRATION_MAX_SAMPLES, len(image_ids)
+    )
     written = 0
     failures: list[tuple[str, str]] = []
     with ThreadPoolExecutor(max_workers=_IMAGE_DOWNLOAD_WORKERS) as executor:
@@ -520,7 +532,9 @@ def _rotate_image(image: np.ndarray, rotation: int) -> np.ndarray:
     return image
 
 
-def _rotate_box(detection: Detection, rotation: int) -> tuple[float, float, float, float]:
+def _rotate_box(
+    detection: Detection, rotation: int
+) -> tuple[float, float, float, float]:
     points = [
         (detection.x_min, detection.y_min),
         (detection.x_min, detection.y_max),
@@ -567,11 +581,13 @@ def _clip_point(x: float, y: float) -> tuple[float, float]:
     )
 
 
-def _selection_key(selected_classes: list[str] | None) -> str:
+def _selection_key(selected_classes: list[str] | None, max_samples: int) -> str:
+    sample_key = f"samples-{max_samples}"
     if not selected_classes:
-        return "unfiltered"
-    digest = hashlib.sha256("\n".join(selected_classes).encode("utf-8")).hexdigest()
-    return digest[:16]
+        return f"unfiltered-{sample_key}"
+    digest_input = f"{max_samples}\n" + "\n".join(selected_classes)
+    digest = hashlib.sha256(digest_input.encode("utf-8"))
+    return f"{sample_key}-{digest.hexdigest()[:16]}"
 
 
 def _ensure_downloaded(path: Path, url: str) -> Path:

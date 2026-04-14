@@ -40,7 +40,9 @@ class TestCalibrationDataset(unittest.TestCase):
             },
         )
 
-        with self.assertLogs("yolo_frigate.calibration_dataset", level="WARNING") as logs:
+        with self.assertLogs(
+            "yolo_frigate.calibration_dataset", level="WARNING"
+        ) as logs:
             selected = _resolve_selected_classes(
                 ["person", "package", "box"],
                 class_index,
@@ -142,6 +144,36 @@ class TestCalibrationDataset(unittest.TestCase):
         )
         materialize.assert_called_once()
 
+    def test_open_images_validation_dataset_cache_key_includes_sample_cap(self):
+        class_index = ClassIndex(
+            display_lookup={"person": "Person"},
+            display_to_label={"Person": "/m/person"},
+            label_to_display={"/m/person": "Person"},
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            unittest.mock.patch(
+                "yolo_frigate.calibration_dataset._load_open_images_boxable_class_index",
+                return_value=class_index,
+            ),
+            unittest.mock.patch(
+                "yolo_frigate.calibration_dataset._build_open_images_subset",
+                return_value=["Person"],
+            ) as build_subset,
+        ):
+            first = ensure_open_images_v7_validation_dataset(
+                Path(tmpdir), max_samples=64
+            )
+            second = ensure_open_images_v7_validation_dataset(
+                Path(tmpdir), max_samples=128
+            )
+
+        self.assertNotEqual(first, second)
+        self.assertEqual(len(build_subset.call_args_list), 2)
+        self.assertEqual(build_subset.call_args_list[0].kwargs["max_samples"], 64)
+        self.assertEqual(build_subset.call_args_list[1].kwargs["max_samples"], 128)
+
     def test_format_label_line_emits_segmentation_polygon_from_bbox(self):
         line = _format_label_line(
             detection=Detection("/m/box", 0.1, 0.4, 0.2, 0.8),
@@ -203,7 +235,9 @@ class TestCalibrationDataset(unittest.TestCase):
                 "yolo_frigate.calibration_dataset._write_sample",
                 side_effect=[ValueError("bad payload"), True, True],
             ) as write_sample,
-            self.assertLogs("yolo_frigate.calibration_dataset", level="WARNING") as logs,
+            self.assertLogs(
+                "yolo_frigate.calibration_dataset", level="WARNING"
+            ) as logs,
         ):
             _materialize_dataset(
                 export_root=Path(tmpdir),
