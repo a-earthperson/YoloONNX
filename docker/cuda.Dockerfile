@@ -9,7 +9,10 @@ ENV UV_LINK_MODE=copy
 ENV UV_CACHE_DIR=/root/.cache/uv
 ENV UV_PYTHON_DOWNLOADS=never
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     ca-certificates \
     git \
     libgl1 \
@@ -25,8 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
+COPY ../pyproject.toml uv.lock README.md ./
+COPY ../src ./src
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv sync --frozen --no-dev --no-editable --extra cuda && \
@@ -62,7 +65,10 @@ ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 ENV UV_PYTHON_DOWNLOADS=never
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     ca-certificates \
     libgl1 \
     libglib2.0-0 \
@@ -78,7 +84,7 @@ WORKDIR /app
 RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics /models
 
 COPY --from=yolo-frigate-cuda-builder /app/.venv /app/.venv
-COPY labelmap.txt /models/
+COPY ../labelmap.txt /models/
 
 EXPOSE 8000
 

@@ -16,11 +16,11 @@ The Dockerfile stem names the **deployment profile**, not the runtime backend. A
 
 | Profile | Dockerfile | Packaged userspace | Default runtime/backend | Native artifacts | Typical devices |
 |---------|------------|--------------------|-------------------------|------------------|-----------------|
-| **TensorRT** | [`tensorrt.Dockerfile`](tensorrt.Dockerfile) | NVIDIA TensorRT userspace | `tensorrt` | `.engine` | NVIDIA: `gpu`, `gpu:0`, ... |
-| **CUDA** | [`cuda.Dockerfile`](cuda.Dockerfile) | NVIDIA CUDA base image plus ONNX/CUDA stack | `onnx` | `.onnx` | `cpu` or NVIDIA: `gpu`, `gpu:0`, ... |
-| **ONNX** | [`onnx.Dockerfile`](onnx.Dockerfile) | Wheel-based ONNX Runtime GPU stack on slim Python | `onnx` | `.onnx` | `cpu` or NVIDIA: `gpu`, `gpu:0`, ... |
-| **OpenVINO** | [`openvino.Dockerfile`](openvino.Dockerfile) | Intel OpenVINO + Level Zero userspace | `openvino` | `*_openvino_model/` | CPU; Intel GPU: `gpu`, `gpu:0`, ...; NPU where supported |
-| **TFLite** | [`tflite.Dockerfile`](tflite.Dockerfile) | TensorFlow Lite + Coral tooling | `tflite` | `.tflite` | `cpu`; Coral: `usb`, `pci`, ... |
+| **TensorRT** | [`tensorrt.Dockerfile`](docker/tensorrt.Dockerfile) | NVIDIA TensorRT userspace | `tensorrt` | `.engine` | NVIDIA: `gpu`, `gpu:0`, ... |
+| **CUDA** | [`cuda.Dockerfile`](docker/cuda.Dockerfile) | NVIDIA CUDA base image plus ONNX/CUDA stack | `onnx` | `.onnx` | `cpu` or NVIDIA: `gpu`, `gpu:0`, ... |
+| **ONNX** | [`onnx.Dockerfile`](docker/onnx.Dockerfile) | Wheel-based ONNX Runtime GPU stack on slim Python | `onnx` | `.onnx` | `cpu` or NVIDIA: `gpu`, `gpu:0`, ... |
+| **OpenVINO** | [`openvino.Dockerfile`](docker/openvino.Dockerfile) | Intel OpenVINO + Level Zero userspace | `openvino` | `*_openvino_model/` | CPU; Intel GPU: `gpu`, `gpu:0`, ...; NPU where supported |
+| **TFLite** | [`tflite.Dockerfile`](docker/tflite.Dockerfile) | TensorFlow Lite + Coral tooling | `tflite` | `.tflite` | `cpu`; Coral: `usb`, `pci`, ... |
 
 Notes:
 
@@ -29,11 +29,11 @@ Notes:
 
 Release builds publish five images from [`.github/workflows/publish.yml`](.github/workflows/publish.yml). The **image name** is the GitHub `owner/repository` name plus a **profile suffix** that matches the Dockerfile stem (GHCR normalizes names to lowercase):
 
-- `ghcr.io/a-earthperson/yolo-frigate-tensorrt` — from `tensorrt.Dockerfile`
-- `ghcr.io/a-earthperson/yolo-frigate-cuda` — from `cuda.Dockerfile`
-- `ghcr.io/a-earthperson/yolo-frigate-onnx` — from `onnx.Dockerfile`
-- `ghcr.io/a-earthperson/yolo-frigate-openvino` — from `openvino.Dockerfile`
-- `ghcr.io/a-earthperson/yolo-frigate-tflite` — from `tflite.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-tensorrt` — from `docker/tensorrt.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-cuda` — from `docker/cuda.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-onnx` — from `docker/onnx.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-openvino` — from `docker/openvino.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-tflite` — from `docker/tflite.Dockerfile`
 
 Forks and private mirrors use their own `owner/repo` in place of `a-earthperson/yolo-frigate`. Version **tags** (for example `v0.1.8`, `latest`) come from the GitHub release via `docker/metadata-action`. You may **retag or mirror** under other names if your registry layout requires it.
 
@@ -297,6 +297,8 @@ detectors:
 ```
 
 Tune `api_timeout` to your SLA: sub-second values work when the model is warm; allow more time for **cold lazy export** or slow hosts. Align Frigate’s `model.labelmap_path` (or Frigate’s label file) with the classes you serve—often the same `labelmap.txt` you pass to `--label_file`.
+
+For the exact upstream Frigate HTTP-detector pipeline, see [`frigate/detectors/plugins/deepstack.py`](https://github.com/blakeblackshear/frigate/blob/master/frigate/detectors/plugins/deepstack.py) for the multipart upload and [`frigate/util/object.py`](https://github.com/blakeblackshear/frigate/blob/master/frigate/util/object.py) plus [`frigate/object_detection/base.py`](https://github.com/blakeblackshear/frigate/blob/master/frigate/object_detection/base.py) for the preprocessing path. In current Frigate builds, the detection region is converted to the configured pixel format, resized to `model.width` x `model.height`, optionally transposed/cast by `input_tensor` / `input_dtype`, then JPEG-encoded and posted as the `image` form field.
 
 ## Runtime-native scope
 

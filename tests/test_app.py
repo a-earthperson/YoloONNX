@@ -26,6 +26,23 @@ class FakeDetector:
         )
 
 
+class LowConfidenceDetector:
+    async def detect(self, img: np.ndarray) -> Predictions:
+        return Predictions(
+            predictions=[
+                Prediction(
+                    label="cat",
+                    confidence=0.12,
+                    y_min=10.0,
+                    x_min=20.0,
+                    y_max=30.0,
+                    x_max=40.0,
+                )
+            ],
+            success=True,
+        )
+
+
 class RecordingPredictionSaver:
     def __init__(self):
         self.items = []
@@ -49,10 +66,11 @@ class TestApp(unittest.TestCase):
         app = create_app(FakeDetector(), saver)
 
         with TestClient(app) as client:
-            response = client.post(
-                "/detect",
-                files={"image": ("frame.jpg", self._image_bytes(), "image/jpeg")},
-            )
+            with self.assertLogs("yolo_frigate.app", level="DEBUG") as captured_logs:
+                response = client.post(
+                    "/detect",
+                    files={"image": ("frame.jpg", self._image_bytes(), "image/jpeg")},
+                )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -73,6 +91,17 @@ class TestApp(unittest.TestCase):
         )
         self.assertEqual(len(saver.items), 1)
         self.assertFalse(saver.items[0].forced)
+        request_log = next(
+            output
+            for output in captured_logs.output
+            if "Received detection image." in output
+        )
+        self.assertIn("filename=frame.jpg", request_log)
+        self.assertIn("content_type=image/jpeg", request_log)
+        self.assertIn("format=jpeg", request_log)
+        self.assertIn("width=8", request_log)
+        self.assertIn("height=8", request_log)
+        self.assertIn("channels=3", request_log)
 
     def test_invalid_image_returns_http_400(self):
         saver = RecordingPredictionSaver()
@@ -92,6 +121,20 @@ class TestApp(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"detail": "Invalid image format"})
+
+    def test_detect_clamps_confidence_floor_to_point_four(self):
+        saver = RecordingPredictionSaver()
+        app = create_app(LowConfidenceDetector(), saver, frigate_confidence_floor=0.4)
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/detect",
+                files={"image": ("frame.jpg", self._image_bytes(), "image/jpeg")},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["predictions"][0]["confidence"], 0.4)
+        self.assertEqual(saver.items[0].predictions.predictions[0].confidence, 0.4)
 
     def test_live_view_is_served(self):
         saver = RecordingPredictionSaver()

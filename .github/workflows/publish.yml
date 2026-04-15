@@ -81,15 +81,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - dockerfile: tensorrt.Dockerfile
+          - dockerfile: docker/tensorrt.Dockerfile
             image_suffix: -tensorrt
-          - dockerfile: cuda.Dockerfile
+          - dockerfile: docker/cuda.Dockerfile
             image_suffix: -cuda
-          - dockerfile: onnx.Dockerfile
+          - dockerfile: docker/onnx.Dockerfile
             image_suffix: -onnx
-          - dockerfile: openvino.Dockerfile
+          - dockerfile: docker/openvino.Dockerfile
             image_suffix: -openvino
-          - dockerfile: tflite.Dockerfile
+          - dockerfile: docker/tflite.Dockerfile
             image_suffix: -tflite
     steps:
       - name: Checkout code

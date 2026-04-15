@@ -18,6 +18,7 @@ class AppConfig:
     device: str
     confidence_threshold: float
     iou_threshold: float
+    frigate_confidence_floor: float
     export_imgsz: int
     export_half: bool
     export_int8: bool
@@ -44,6 +45,23 @@ def _bounded_int(name: str, minimum: int, maximum: int):
             ValueError
         ) as exc:  # pragma: no cover - argparse formats the final error.
             raise argparse.ArgumentTypeError(f"{name} must be an integer.") from exc
+        if not minimum <= parsed <= maximum:
+            raise argparse.ArgumentTypeError(
+                f"{name} must be between {minimum} and {maximum}."
+            )
+        return parsed
+
+    return parse
+
+
+def _bounded_float(name: str, minimum: float, maximum: float):
+    def parse(value: str) -> float:
+        try:
+            parsed = float(value)
+        except (
+            ValueError
+        ) as exc:  # pragma: no cover - argparse formats the final error.
+            raise argparse.ArgumentTypeError(f"{name} must be a float.") from exc
         if not minimum <= parsed <= maximum:
             raise argparse.ArgumentTypeError(
                 f"{name} must be between {minimum} and {maximum}."
@@ -100,6 +118,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.45,
         help="Intersection over Union (IoU) threshold for detection",
+    )
+    parser.add_argument(
+        "--frigate_confidence_floor",
+        type=_bounded_float("frigate_confidence_floor", 0.0, 1.0),
+        default=0.0,
+        help="Minimum confidence exposed in /detect responses.",
     )
     parser.add_argument(
         "--export_imgsz",
@@ -212,6 +236,7 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         device=args.device,
         confidence_threshold=args.confidence_threshold,
         iou_threshold=args.iou_threshold,
+        frigate_confidence_floor=args.frigate_confidence_floor,
         export_imgsz=args.export_imgsz,
         export_half=args.export_half,
         export_int8=args.export_int8,

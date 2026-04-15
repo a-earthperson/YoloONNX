@@ -15,15 +15,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - dockerfile: tensorrt.Dockerfile
+          - dockerfile: docker/tensorrt.Dockerfile
             image_tag: tensorrt
-          - dockerfile: cuda.Dockerfile
+          - dockerfile: docker/cuda.Dockerfile
             image_tag: cuda
-          - dockerfile: onnx.Dockerfile
+          - dockerfile: docker/onnx.Dockerfile
             image_tag: onnx
-          - dockerfile: openvino.Dockerfile
+          - dockerfile: docker/openvino.Dockerfile
             image_tag: openvino
-          - dockerfile: tflite.Dockerfile
+          - dockerfile: docker/tflite.Dockerfile
             image_tag: tflite
     steps:
       - name: Checkout code

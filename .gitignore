@@ -395,3 +395,5 @@ __marimo__/
 .sessions
 .sqlmodel
 nuitka-crash-report.xml
+
+stack.yml

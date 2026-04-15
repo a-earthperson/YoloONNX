@@ -19,6 +19,7 @@ def make_config(**overrides) -> AppConfig:
         "device": "gpu:0",
         "confidence_threshold": 0.25,
         "iou_threshold": 0.45,
+        "frigate_confidence_floor": 0.0,
         "export_imgsz": 640,
         "export_half": False,
         "export_int8": False,

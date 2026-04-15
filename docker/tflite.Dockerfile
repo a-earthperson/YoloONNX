@@ -29,13 +29,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics /models
 
-COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
+COPY ../pyproject.toml uv.lock README.md ./
+COPY ../src ./src
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv pip install --system ".[tflite]"
 
-COPY labelmap.txt /models/
+COPY ../labelmap.txt /models/
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 CMD [ "curl", "--fail", "--silent", "http://localhost:8000/health" ]

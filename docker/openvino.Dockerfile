@@ -119,8 +119,8 @@ RUN mkdir -p /opt/intel-runtime-root && \
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
+COPY ../pyproject.toml uv.lock README.md ./
+COPY ../src ./src
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     uv sync --frozen --no-dev --no-editable --extra openvino
@@ -154,7 +154,7 @@ RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics /models
 
 COPY --from=yolo-frigate-openvino-builder /opt/intel-runtime-root/ /
 COPY --from=yolo-frigate-openvino-builder /app/.venv /app/.venv
-COPY labelmap.txt /models/
+COPY ../labelmap.txt /models/
 EXPOSE 8000
 
 HEALTHCHECK --interval=60s --timeout=60s --start-period=30s --retries=5 CMD [ "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)" ]

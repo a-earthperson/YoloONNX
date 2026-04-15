@@ -33,7 +33,7 @@ def build_app(config: AppConfig):
         config.save_threshold,
         config.save_path,
     )
-    return create_app(detector, prediction_saver)
+    return create_app(detector, prediction_saver, config.frigate_confidence_floor)
 
 
 async def main(argv: list[str] | None = None):

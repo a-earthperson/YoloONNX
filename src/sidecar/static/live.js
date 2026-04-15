@@ -1,5 +1,6 @@
-const DETECT_ENDPOINT = "/detect";
+const DETECT_ENDPOINT = "/predict";
 const DEFAULT_DETECTION_FPS = 2;
+const API_TIMEOUT_MS = 1000;
 const JPEG_QUALITY = 0.85;
 
 class LiveDetectorApp {
@@ -17,10 +18,11 @@ class LiveDetectorApp {
     this.predictions = [];
     this.detectionTimer = null;
     this.renderHandle = null;
-    this.inFlight = false;
     this.loopVersion = 0;
+    this.requestQueue = new Map();
     this.requestSequence = 0;
     this.lastAppliedSequence = 0;
+    this.droppedRequestCount = 0;
     this.lastDetectionLatencyMs = null;
     this.lastDetectionAt = null;
   }
@@ -64,7 +66,7 @@ class LiveDetectorApp {
     if (!Number.isFinite(parsed) || parsed <= 0) {
       return DEFAULT_DETECTION_FPS;
     }
-    return Math.min(parsed, 30);
+    return parsed;
   }
 
   waitForVideoMetadata() {
@@ -105,47 +107,93 @@ class LiveDetectorApp {
     this.loopVersion += 1;
     const activeLoopVersion = this.loopVersion;
     const intervalMs = 1000 / this.parseFps(this.fpsInput.value);
+    this.scheduleNextDetection(intervalMs, activeLoopVersion);
+  }
+
+  scheduleNextDetection(intervalMs, loopVersion) {
     this.detectionTimer = window.setTimeout(() => {
-      void this.runDetectionLoop(intervalMs, activeLoopVersion);
+      this.runDetectionLoop(intervalMs, loopVersion);
     }, intervalMs);
   }
 
-  async runDetectionLoop(intervalMs, loopVersion) {
-    try {
-      if (!this.inFlight && this.video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        await this.detectCurrentFrame();
-      }
-    } finally {
-      if (loopVersion !== this.loopVersion) {
-        return;
-      }
-      this.detectionTimer = window.setTimeout(() => {
-        void this.runDetectionLoop(intervalMs, loopVersion);
-      }, intervalMs);
+  runDetectionLoop(intervalMs, loopVersion) {
+    if (loopVersion !== this.loopVersion) {
+      return;
     }
+
+    if (this.video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      void this.detectCurrentFrame();
+    }
+
+    this.scheduleNextDetection(intervalMs, loopVersion);
   }
 
   async detectCurrentFrame() {
-    this.inFlight = true;
     const requestId = ++this.requestSequence;
     const startedAt = performance.now();
 
     try {
       const frame = await this.captureFrame();
-      const result = await this.requestDetections(frame);
+      const signal = this.enqueueRequest(requestId, startedAt);
+      const result = await this.requestDetections(frame, signal);
+      const queuedRequest = this.finalizeQueuedRequest(requestId);
+      if (!queuedRequest) {
+        return;
+      }
       if (requestId >= this.lastAppliedSequence) {
         this.predictions = Array.isArray(result.predictions) ? result.predictions : [];
         this.lastAppliedSequence = requestId;
-        this.lastDetectionLatencyMs = performance.now() - startedAt;
+        this.lastDetectionLatencyMs = performance.now() - queuedRequest.startedAt;
         this.lastDetectionAt = new Date();
         this.statusText.textContent = "Camera ready. Running detections.";
         this.metricsText.textContent = this.describeMetrics();
       }
     } catch (error) {
+      this.finalizeQueuedRequest(requestId);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
       this.statusText.textContent = `Detection failed: ${this.formatError(error)}`;
-    } finally {
-      this.inFlight = false;
     }
+  }
+
+  enqueueRequest(requestId, startedAt) {
+    const controller = new AbortController();
+    const timeoutHandle = window.setTimeout(() => {
+      this.dropQueuedRequest(requestId);
+    }, API_TIMEOUT_MS);
+
+    this.requestQueue.set(requestId, {
+      controller,
+      startedAt,
+      timeoutHandle,
+    });
+    return controller.signal;
+  }
+
+  finalizeQueuedRequest(requestId) {
+    const queuedRequest = this.requestQueue.get(requestId);
+    if (!queuedRequest) {
+      return null;
+    }
+
+    this.requestQueue.delete(requestId);
+    window.clearTimeout(queuedRequest.timeoutHandle);
+    return queuedRequest;
+  }
+
+  dropQueuedRequest(requestId) {
+    const queuedRequest = this.requestQueue.get(requestId);
+    if (!queuedRequest) {
+      return false;
+    }
+
+    this.requestQueue.delete(requestId);
+    window.clearTimeout(queuedRequest.timeoutHandle);
+    queuedRequest.controller.abort();
+    this.droppedRequestCount += 1;
+    this.metricsText.textContent = this.describeMetrics();
+    return true;
   }
 
   captureFrame() {
@@ -172,7 +220,7 @@ class LiveDetectorApp {
     });
   }
 
-  async requestDetections(frameBlob) {
+  async requestDetections(frameBlob, signal) {
     const formData = new FormData();
     formData.append("image", frameBlob, "frame.jpg");
 
@@ -180,6 +228,7 @@ class LiveDetectorApp {
       method: "POST",
       body: formData,
       cache: "no-store",
+      signal,
     });
 
     if (!response.ok) {
@@ -231,7 +280,7 @@ class LiveDetectorApp {
     const timestamp = this.lastDetectionAt === null
       ? "never"
       : this.lastDetectionAt.toLocaleTimeString();
-    return `${this.predictions.length} detections, last update ${timestamp}, latency ${latency}`;
+    return `${this.predictions.length} detections, last update ${timestamp}, latency ${latency}, in-flight ${this.requestQueue.size}, dropped ${this.droppedRequestCount}`;
   }
 
   formatError(error) {

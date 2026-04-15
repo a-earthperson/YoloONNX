@@ -16,6 +16,32 @@ class TestConfig(unittest.TestCase):
             config.export_calibration_max_samples,
             DEFAULT_EXPORT_CALIBRATION_MAX_SAMPLES,
         )
+        self.assertEqual(config.frigate_confidence_floor, 0.0)
+
+    def test_parse_args_accepts_frigate_confidence_floor_override(self):
+        config = parse_args(
+            [
+                "--model_file",
+                "model.pt",
+                "--frigate_confidence_floor",
+                "0.4",
+            ]
+        )
+
+        self.assertEqual(config.frigate_confidence_floor, 0.4)
+
+    def test_parse_args_rejects_out_of_range_frigate_confidence_floor(self):
+        for invalid in ("-0.01", "1.01"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(SystemExit):
+                    parse_args(
+                        [
+                            "--model_file",
+                            "model.pt",
+                            "--frigate_confidence_floor",
+                            invalid,
+                        ]
+                    )
 
     def test_parse_args_accepts_calibration_sample_cap_override(self):
         config = parse_args(
