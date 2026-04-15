@@ -123,35 +123,7 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv sync --frozen --no-dev --no-editable --extra openvino && \
-    uv pip install \
-    --python /app/.venv/bin/python \
-    "git+https://github.com/ultralytics/CLIP.git" && \
-    uv pip install \
-    --python /app/.venv/bin/python \
-    --reinstall-package torch \
-    --reinstall-package torchvision \
-    --torch-backend cpu \
-    "torch==2.11.0" \
-    "torchvision==0.26.0" && \
-    uv pip uninstall \
-    --python /app/.venv/bin/python \
-    nvidia-cublas \
-    nvidia-cuda-cupti \
-    nvidia-cuda-nvrtc \
-    nvidia-cuda-runtime \
-    nvidia-cudnn-cu13 \
-    nvidia-cufft \
-    nvidia-cufile \
-    nvidia-curand \
-    nvidia-cusolver \
-    nvidia-cusparse \
-    nvidia-cusparselt-cu13 \
-    nvidia-nccl-cu13 \
-    nvidia-nvjitlink \
-    nvidia-nvshmem-cu13 \
-    nvidia-nvtx \
-    triton
+    uv sync --frozen --no-dev --no-editable --extra openvino
 
 FROM python:3.12-slim-bookworm AS yolo-frigate-openvino
 

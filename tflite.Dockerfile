@@ -29,12 +29,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics /models
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv pip install --system ".[tflite]" && \
-    uv pip install --system "git+https://github.com/ultralytics/CLIP.git"
+    uv pip install --system ".[tflite]"
 
 COPY labelmap.txt /models/
 EXPOSE 8000

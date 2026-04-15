@@ -1,6 +1,6 @@
 ARG PYTHON_IMAGE="python:3.12-slim-bookworm"
 
-FROM ${PYTHON_IMAGE} AS yolo-frigate-onnx-gpu-builder
+FROM ${PYTHON_IMAGE} AS yolo-frigate-tensorrt-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -26,17 +26,21 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv sync --frozen --no-dev --no-editable --extra onnx-gpu && \
-    uv pip install \
-    --python "/app/.venv/bin/python" \
-    "git+https://github.com/ultralytics/CLIP.git"
+    uv sync --frozen --no-dev --no-editable --extra tensorrt && \
+    python - <<'PY'
+from pathlib import Path
 
-FROM ${PYTHON_IMAGE} AS yolo-frigate-onnx-gpu
+site_packages = next(Path("/app/.venv/lib").glob("python3.*/site-packages"))
+for path in (site_packages / "tensorrt_libs").glob("*win*"):
+    path.unlink()
+PY
+
+FROM ${PYTHON_IMAGE} AS yolo-frigate-tensorrt
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV YOLO_FRIGATE_RUNTIME=onnx
+ENV YOLO_FRIGATE_RUNTIME=tensorrt
 ENV YOLO_FRIGATE_MODEL_CACHE_DIR=/cache/yolo-frigate
 ENV YOLO_CONFIG_DIR=/cache/Ultralytics
 ENV PATH="/app/.venv/bin:${PATH}"
@@ -57,7 +61,7 @@ WORKDIR /app
 
 RUN mkdir -p /cache/yolo-frigate /cache/Ultralytics /models
 
-COPY --from=yolo-frigate-onnx-gpu-builder /app/.venv /app/.venv
+COPY --from=yolo-frigate-tensorrt-builder /app/.venv /app/.venv
 COPY labelmap.txt /models/
 EXPOSE 8000
 

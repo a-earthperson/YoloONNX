@@ -15,14 +15,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - dockerfile: nvidia-trt.Dockerfile
-            image_tag: nvidia-trt
-          - dockerfile: intel-gpu.Dockerfile
-            image_tag: intel-gpu
-          - dockerfile: coral-tpu.Dockerfile
-            image_tag: coral-tpu
-          - dockerfile: onnx-gpu.Dockerfile
-            image_tag: onnx-gpu
+          - dockerfile: tensorrt.Dockerfile
+            image_tag: tensorrt
+          - dockerfile: cuda.Dockerfile
+            image_tag: cuda
+          - dockerfile: onnx.Dockerfile
+            image_tag: onnx
+          - dockerfile: openvino.Dockerfile
+            image_tag: openvino
+          - dockerfile: tflite.Dockerfile
+            image_tag: tflite
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

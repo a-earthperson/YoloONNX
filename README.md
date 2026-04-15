@@ -2,31 +2,38 @@
 
 Source: **[github.com/a-earthperson/yolo-frigate](https://github.com/a-earthperson/yolo-frigate)**.
 
-HTTP object detection for **NVR-style stacks**—most often [Frigate](https://github.com/blakeblackshear/frigate) or anything else that speaks a **DeepStack-compatible** multipart `POST /detect` API. The service wraps Ultralytics YOLO models, optionally **lazy-exporting** Ultralytics `.pt` checkpoints into each image’s native runtime (TensorRT, OpenVINO, TFLite, EdgeTPU, ONNX) on first use.
+HTTP object detection for **NVR-style stacks**—most often [Frigate](https://github.com/blakeblackshear/frigate) or anything else that speaks a **DeepStack-compatible** multipart `POST /detect` API. The service wraps Ultralytics YOLO models, optionally **lazy-exporting** Ultralytics `.pt` checkpoints into the runtime backend selected by the chosen image profile on first use.
 
 Typical deployments:
 
-- One **GPU-class** container per inference node (NVIDIA TensorRT or ONNX Runtime, Intel iGPU via OpenVINO, Coral EdgeTPU via TFLite, and so on).
+- One container per inference node, with the **image profile** chosen for the target userspace stack (`tensorrt`, `cuda`, `onnx`, `openvino`, or `tflite`).
 - Shared **read-only model trees** and **writable export caches** (bind mounts, named volumes, or NFS when workers are spread across machines).
-- **Orchestrator placement** so NVIDIA-class images (TensorRT, ONNX GPU) land on GPU hosts and OpenVINO on Intel-GPU hosts—Compose on a single box, Swarm/Kubernetes when models and cache live on shared storage.
+- **Orchestrator placement** so NVIDIA-oriented profiles (`tensorrt`, `cuda`, `onnx`) land on NVIDIA hosts, `openvino` lands on Intel GPU / NPU hosts, and `tflite` lands on CPU or Coral EdgeTPU hosts.
 
-## Runtime images
+## Image profiles
 
-Each Docker image ships with a fixed `YOLO_FRIGATE_RUNTIME` and the dependencies for that stack only:
+The Dockerfile stem names the **deployment profile**, not the runtime backend. A profile chooses the base image, native userspace, and dependency bundle. The application runtime is still selected by `YOLO_FRIGATE_RUNTIME` plus model/device resolution inside that profile.
 
-| Variant | Dockerfile | `YOLO_FRIGATE_RUNTIME` | Native artifacts | Typical devices |
-|---------|------------|-------------------|------------------|-----------------|
-| **NVIDIA TensorRT** | [`nvidia-trt.Dockerfile`](nvidia-trt.Dockerfile) | `tensorrt` | `.engine` | NVIDIA: `gpu`, `gpu:0`, … |
-| **NVIDIA ONNX Runtime (GPU)** | [`onnx-gpu.Dockerfile`](onnx-gpu.Dockerfile) | `onnx` | `.onnx` | `cpu` (CPU EP); NVIDIA: `gpu`, `gpu:0`, … |
-| **Intel GPU (OpenVINO)** | [`intel-gpu.Dockerfile`](intel-gpu.Dockerfile) | `openvino` | `*_openvino_model/` | CPU; Intel GPU: `gpu`, `gpu:0`, …; NPU where supported |
-| **Coral EdgeTPU (TFLite)** | [`coral-tpu.Dockerfile`](coral-tpu.Dockerfile) | `tflite` | `.tflite` | `cpu`; Coral: `usb`, `pci`, … |
+| Profile | Dockerfile | Packaged userspace | Default runtime/backend | Native artifacts | Typical devices |
+|---------|------------|--------------------|-------------------------|------------------|-----------------|
+| **TensorRT** | [`tensorrt.Dockerfile`](tensorrt.Dockerfile) | NVIDIA TensorRT userspace | `tensorrt` | `.engine` | NVIDIA: `gpu`, `gpu:0`, ... |
+| **CUDA** | [`cuda.Dockerfile`](cuda.Dockerfile) | NVIDIA CUDA base image plus ONNX/CUDA stack | `onnx` | `.onnx` | `cpu` or NVIDIA: `gpu`, `gpu:0`, ... |
+| **ONNX** | [`onnx.Dockerfile`](onnx.Dockerfile) | Wheel-based ONNX Runtime GPU stack on slim Python | `onnx` | `.onnx` | `cpu` or NVIDIA: `gpu`, `gpu:0`, ... |
+| **OpenVINO** | [`openvino.Dockerfile`](openvino.Dockerfile) | Intel OpenVINO + Level Zero userspace | `openvino` | `*_openvino_model/` | CPU; Intel GPU: `gpu`, `gpu:0`, ...; NPU where supported |
+| **TFLite** | [`tflite.Dockerfile`](tflite.Dockerfile) | TensorFlow Lite + Coral tooling | `tflite` | `.tflite` | `cpu`; Coral: `usb`, `pci`, ... |
 
-Release builds publish four images from [`.github/workflows/publish.yml`](.github/workflows/publish.yml). The **image name** is the GitHub `owner/repository` name plus a **variant suffix** that matches the Dockerfile stem (GHCR normalizes names to lowercase):
+Notes:
 
-- `ghcr.io/a-earthperson/yolo-frigate-nvidia-trt` — from `nvidia-trt.Dockerfile`
-- `ghcr.io/a-earthperson/yolo-frigate-onnx-gpu` — from `onnx-gpu.Dockerfile`
-- `ghcr.io/a-earthperson/yolo-frigate-intel-gpu` — from `intel-gpu.Dockerfile`
-- `ghcr.io/a-earthperson/yolo-frigate-coral-tpu` — from `coral-tpu.Dockerfile`
+- `cuda` and `onnx` are different deployment profiles for the same application runtime backend: both run with `--runtime=onnx`, but `cuda` bakes in an NVIDIA CUDA userspace while `onnx` stays on a slimmer Python base image.
+- `tflite` sets `YOLO_FRIGATE_RUNTIME=tflite`, but `.tflite` models resolve to `edgetpu` automatically when `--device` names a Coral accelerator instead of `cpu`.
+
+Release builds publish five images from [`.github/workflows/publish.yml`](.github/workflows/publish.yml). The **image name** is the GitHub `owner/repository` name plus a **profile suffix** that matches the Dockerfile stem (GHCR normalizes names to lowercase):
+
+- `ghcr.io/a-earthperson/yolo-frigate-tensorrt` — from `tensorrt.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-cuda` — from `cuda.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-onnx` — from `onnx.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-openvino` — from `openvino.Dockerfile`
+- `ghcr.io/a-earthperson/yolo-frigate-tflite` — from `tflite.Dockerfile`
 
 Forks and private mirrors use their own `owner/repo` in place of `a-earthperson/yolo-frigate`. Version **tags** (for example `v0.1.8`, `latest`) come from the GitHub release via `docker/metadata-action`. You may **retag or mirror** under other names if your registry layout requires it.
 
@@ -41,7 +48,7 @@ Shared across all runtime profiles:
 
 ## Runtime selection and devices
 
-Inside an image, runtime is determined by `YOLO_FRIGATE_RUNTIME` (set in the variant Dockerfile). Legacy images may still use `YOLOREST_RUNTIME`; the application reads both. You normally pass a `.pt` checkpoint to `--model_file` and let that image export lazily.
+Inside Docker, the image profile constrains the available native stack, while `YOLO_FRIGATE_RUNTIME` selects the default backend inside that stack. Legacy images may still use `YOLOREST_RUNTIME`; the application reads both. You normally pass a `.pt` checkpoint to `--model_file` and let the selected profile export lazily.
 
 Overrides when running outside Docker:
 
@@ -58,7 +65,7 @@ The installable project is **`yolo-frigate`**; the Python import package is **`y
 
 Pre-exported artifacts can be passed directly to `--model_file`: TensorRT `.engine`, ONNX `.onnx`, OpenVINO `*_openvino_model/`, TFLite / EdgeTPU `.tflite`.
 
-Device strings are runtime-specific (TensorRT: `gpu`, `gpu:0`, …; ONNX: `cpu`, `gpu`, `gpu:0`, …; OpenVINO: `cpu`, `gpu`, `npu`, …; TFLite: `cpu`; EdgeTPU: `usb`, `pci`, …). `--runtime` is the only runtime selector; `--label_file` overrides embedded class names when needed.
+Device strings are runtime-specific (TensorRT: `gpu`, `gpu:0`, ...; ONNX: `cpu`, `gpu`, `gpu:0`, ...; OpenVINO: `cpu`, `gpu`, `npu`, ...; TFLite: `cpu`; EdgeTPU: `usb`, `pci`, ...). `--runtime` is the backend selector; the Dockerfile/profile name is only a packaging choice. `--label_file` overrides embedded class names when needed.
 
 ## Lazy export and cache
 
@@ -89,17 +96,17 @@ Common export flags:
 
 - **`/models`** — readable tree with checkpoints or pre-exported artifacts and optional `labelmap.txt` (or pass `--label_file`).
 - **`/cache`** — writable export cache (omit only if you never lazy-export or you redirect `YOLO_FRIGATE_MODEL_CACHE_DIR` elsewhere).
-- **Devices** — NVIDIA Container Toolkit + GPU reservation for TensorRT and ONNX GPU; `/dev/dri` (and often `video`/`render` groups) for Intel GPU OpenVINO; Coral device nodes for EdgeTPU.
+- **Devices** — NVIDIA Container Toolkit + GPU reservation for `tensorrt`, `cuda`, and typically `onnx`; `/dev/dri` (and often `video`/`render` groups) for `openvino`; Coral device nodes for `tflite` when using `edgetpu` devices.
 - **Shared memory** — large `tmpfs` on `/dev/shm` can help some workloads when memory pressure appears during export or batching.
 
 ### Docker Compose (single host)
 
-Minimal TensorRT service (image name ends with `-nvidia-trt` for releases from this repo):
+Minimal TensorRT service (image name ends with `-tensorrt` for releases from this repo):
 
 ```yaml
 services:
   yolo-frigate-tensorrt:
-    image: ghcr.io/a-earthperson/yolo-frigate-nvidia-trt:v1.2.3
+    image: ghcr.io/a-earthperson/yolo-frigate-tensorrt:v1.2.3
     restart: on-failure
     read_only: true
     security_opt:
@@ -117,16 +124,16 @@ services:
     gpus: all
 ```
 
-The ONNX GPU image (`yolo-frigate-onnx-gpu`) uses the same NVIDIA + `gpus` pattern; runtime is fixed to `onnx` in the Dockerfile.
+The `cuda` and `onnx` images both fix runtime to `onnx`. Use `yolo-frigate-cuda` when you want an NVIDIA CUDA base image and use `yolo-frigate-onnx` for the slimmer wheel-based ONNX profile; both use the same NVIDIA + `gpus` pattern for GPU execution.
 
 For **Swarm**, use GPU reservations on `deploy.resources` instead of `gpus: all` (Compose ignores `deploy` on non-Swarm setups).
 
-Intel GPU (OpenVINO image; image name ends with `-intel-gpu`):
+OpenVINO profile (image name ends with `-openvino`):
 
 ```yaml
 services:
-  yolo-frigate-intel-gpu:
-    image: ghcr.io/a-earthperson/yolo-frigate-intel-gpu:v1.2.3
+  yolo-frigate-openvino:
+    image: ghcr.io/a-earthperson/yolo-frigate-openvino:v1.2.3
     restart: on-failure
     read_only: true
     devices:
@@ -145,7 +152,7 @@ services:
       - "--export_dynamic"
 ```
 
-Coral EdgeTPU (image name ends with `-coral-tpu`):
+TFLite / Coral profile (image name ends with `-tflite`):
 
 ```yaml
 networks:
@@ -155,7 +162,7 @@ networks:
 
 services:
   yolo-frigate:
-    image: ghcr.io/a-earthperson/yolo-frigate-coral-tpu:v1.2.3
+    image: ghcr.io/a-earthperson/yolo-frigate-tflite:v1.2.3
     restart: on-failure
     read_only: true
     group_add:
@@ -184,7 +191,7 @@ Pattern:
 
 - **Overlay network** attached to Frigate and detector services so `http://<service>:8000/detect` resolves cluster-wide.
 - **Named volumes** backed by NFS for `/models` and `/cache` so exports done on one node are visible to others (same cache key → same artifact).
-- **Placement constraints** so NVIDIA GPU images (TensorRT, ONNX GPU) run only on GPU-labeled nodes and OpenVINO on Intel-GPU-labeled nodes.
+- **Placement constraints** so NVIDIA-oriented profiles (`tensorrt`, `cuda`, `onnx`) run only on GPU-labeled nodes and `openvino` on Intel GPU / NPU labeled nodes.
 - **Optional** `cap_add: [CAP_PERFMON]` when you want perf counters on Intel stacks; **NVIDIA** stacks often set `NVIDIA_VISIBLE_DEVICES` / `NVIDIA_DRIVER_CAPABILITIES` for full GPU feature exposure inside the container.
 
 Illustrative `stack.yml` (replace NFS address, paths, images, and labels with yours):
@@ -227,7 +234,7 @@ x-base: &x-base
 services:
   objectdetector:
     <<: *x-base
-    image: ghcr.io/a-earthperson/yolo-frigate-nvidia-trt:0.1.8
+    image: ghcr.io/a-earthperson/yolo-frigate-tensorrt:0.1.8
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: all
@@ -250,7 +257,7 @@ services:
 
   yolov9-intel:
     <<: *x-base
-    image: ghcr.io/a-earthperson/yolo-frigate-intel-gpu:0.1.7
+    image: ghcr.io/a-earthperson/yolo-frigate-openvino:0.1.7
     command:
       - "--device=gpu"
       - "--export_imgsz=320"
@@ -353,13 +360,15 @@ Optional inference extras (install only what you need locally):
 uv sync --group dev --extra tflite
 uv sync --group dev --extra tensorrt
 uv sync --group dev --extra openvino
-uv sync --group dev --extra onnx-gpu
+uv sync --group dev --extra cuda
+uv sync --group dev --extra onnx
 ```
 
 Notes:
 
 - Runtime extras are primarily intended for Linux environments that mirror the Docker images.
-- Lazy export depends on `ultralytics`; TFLite export additionally needs TensorFlow, native OpenVINO export needs `openvino`, and the ONNX GPU image uses the `onnx-gpu` extra (`onnxruntime-gpu`).
+- The repo's `tool.uv.sources` pins `torch` / `torchvision` to the CPU or CUDA PyTorch indexes for the `openvino` and `cuda` extras and pins `tensorrt-cu13` to NVIDIA's package index for the `tensorrt` extra.
+- `cuda` and `onnx` are separate install profiles that both target the `onnx` runtime backend.
 
 Format and lint:
 

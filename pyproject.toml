@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yolo-frigate"
-version = "0.3.12"
+version = "0.3.13"
 description = "yolo-frigate: DeepStack-shaped REST API for YOLO object detection with lazy runtime-native export"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,26 +21,78 @@ dependencies = [
 
 [project.optional-dependencies]
 tensorrt = [
-    "ultralytics; platform_system == 'Linux'",
+    "clip @ git+https://github.com/ultralytics/CLIP.git ; platform_system == 'Linux'",
     "onnx>=1.12.0,<2.0.0; platform_system == 'Linux'",
     "onnxslim>=0.1.71; platform_system == 'Linux'",
     "onnxruntime-gpu; platform_system == 'Linux'",
+    "tensorrt-cu13-bindings>=10.13.2.6; platform_system == 'Linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64') and python_version < '3.14'",
+    "tensorrt-cu13-libs>=10.13.2.6; platform_system == 'Linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')",
+    "ultralytics; platform_system == 'Linux'",
 ]
 tflite = [
+    "clip @ git+https://github.com/ultralytics/CLIP.git ; platform_system == 'Linux'",
     "tflite-runtime==2.14.0",
     "tensorflow-cpu; platform_system == 'Linux'",
     "ultralytics; platform_system == 'Linux'",
 ]
 openvino = [
+    "clip @ git+https://github.com/ultralytics/CLIP.git ; platform_system == 'Linux'",
     "openvino",
+    "torch==2.11.0; platform_system == 'Linux'",
+    "torchvision==0.26.0; platform_system == 'Linux'",
     "ultralytics; platform_system == 'Linux'",
 ]
-onnx-gpu = [
-    "ultralytics; platform_system == 'Linux'",
+cuda = [
+    "clip @ git+https://github.com/ultralytics/CLIP.git ; platform_system == 'Linux'",
     "onnx>=1.12.0,<2.0.0; platform_system == 'Linux'",
     "onnxslim>=0.1.71; platform_system == 'Linux'",
     "onnxruntime-gpu; platform_system == 'Linux'",
+    "torch==2.11.0; platform_system == 'Linux'",
+    "torchvision==0.26.0; platform_system == 'Linux'",
+    "ultralytics; platform_system == 'Linux'",
 ]
+onnx = [
+    "clip @ git+https://github.com/ultralytics/CLIP.git ; platform_system == 'Linux'",
+    "onnx>=1.12.0,<2.0.0; platform_system == 'Linux'",
+    "onnxslim>=0.1.71; platform_system == 'Linux'",
+    "onnxruntime-gpu; platform_system == 'Linux'",
+    "ultralytics; platform_system == 'Linux'",
+]
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "cuda" },
+        { extra = "openvino" },
+    ],
+]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu129", extra = "cuda" },
+    { index = "pytorch-cpu", extra = "openvino" },
+]
+torchvision = [
+    { index = "pytorch-cu129", extra = "cuda" },
+    { index = "pytorch-cpu", extra = "openvino" },
+]
+tensorrt-cu13-bindings = { index = "nvidia-pypi" }
+tensorrt-cu13-libs = { index = "nvidia-pypi" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
+
+[[tool.uv.index]]
+name = "nvidia-pypi"
+url = "https://pypi.nvidia.com"
+explicit = true
 
 [project.urls]
 Repository = "https://github.com/a-earthperson/yolo-frigate"
