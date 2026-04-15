@@ -19,6 +19,7 @@ from yolo_frigate.runtime_profile import (
     describe_model_source,
 )
 from yolo_frigate.ultralytics_support import (
+    ensure_tensorrt_namespace,
     get_ultralytics_version,
     import_ultralytics_yoloe,
     resolve_ultralytics_checkpoint,
@@ -180,6 +181,8 @@ class ModelArtifactManager:
         return json.loads(manifest_path.read_text(encoding="utf-8"))
 
     def _export_artifact(self, request: ExportRequest, staged_source: Path) -> Path:
+        if request.runtime_profile.name == "tensorrt":
+            ensure_tensorrt_namespace()
         yolo_cls = import_ultralytics_yoloe()
         model = yolo_cls(str(staged_source))
         if request.class_names:

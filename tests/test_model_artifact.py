@@ -153,6 +153,35 @@ class TestModelArtifactManager(unittest.TestCase):
                     (Path(first.path).parents[1] / "manifest.json").is_file()
                 )
 
+    def test_tensorrt_export_ensures_import_namespace(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir) / "model.pt"
+            model_path.write_bytes(b"weights")
+            cache_dir = Path(tmpdir) / "cache"
+            config = make_config(
+                runtime="tensorrt",
+                model_file=str(model_path),
+                model_cache_dir=str(cache_dir),
+            )
+            manager = ModelArtifactManager()
+            ultralytics_module = types.SimpleNamespace(
+                YOLOE=FakeYOLOE, __version__="8.3.0"
+            )
+
+            with (
+                unittest.mock.patch.dict(
+                    sys.modules, {"ultralytics": ultralytics_module}
+                ),
+                unittest.mock.patch(
+                    "yolo_frigate.model_artifact.ensure_tensorrt_namespace"
+                ) as ensure_tensorrt_namespace,
+            ):
+                manager.resolve(
+                    config, resolve_runtime_profile(config), ["person", "package"]
+                )
+
+        ensure_tensorrt_namespace.assert_called_once_with()
+
     def test_cache_key_changes_when_export_flags_change(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "model.pt"

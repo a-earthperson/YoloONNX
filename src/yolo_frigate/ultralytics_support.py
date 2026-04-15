@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+import importlib
 import os
+import sys
 import tempfile
+import types
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+
+_TENSORRT_PLUGIN_SUBMODULES = (
+    "_autotune",
+    "_export",
+    "_lib",
+    "_plugin_class",
+    "_tensor",
+    "_top_level",
+    "_utils",
+    "_validate",
+)
 
 
 def import_ultralytics_yoloe():
@@ -45,6 +60,36 @@ def get_ultralytics_version() -> str | None:
     return getattr(ultralytics, "__version__", None)
 
 
+def ensure_tensorrt_namespace() -> None:
+    try:
+        importlib.import_module("tensorrt")
+        return
+    except ImportError:
+        pass
+
+    try:
+        bindings = importlib.import_module("tensorrt_bindings")
+    except ImportError:
+        return
+
+    module = types.ModuleType("tensorrt")
+    module.__dict__.update(bindings.__dict__)
+    module.__file__ = getattr(bindings, "__file__", None)
+    module.__package__ = "tensorrt"
+    module.__path__ = []
+    module.__spec__ = ModuleSpec("tensorrt", loader=None, is_package=True)
+    sys.modules["tensorrt"] = module
+
+    plugin_module = _alias_module("tensorrt.plugin", "tensorrt_bindings.plugin")
+    if plugin_module is not None:
+        module.plugin = plugin_module
+        for suffix in _TENSORRT_PLUGIN_SUBMODULES:
+            _alias_module(
+                f"tensorrt.plugin.{suffix}",
+                f"tensorrt_bindings.plugin.{suffix}",
+            )
+
+
 def _prepare_ultralytics_environment() -> None:
     configured = os.getenv("YOLO_CONFIG_DIR")
     if configured and _is_writable_directory(Path(configured)):
@@ -74,3 +119,12 @@ def _ensure_writable_directory(path: Path) -> bool:
     except OSError:
         return False
     return _is_writable_directory(path)
+
+
+def _alias_module(alias_name: str, target_name: str):
+    try:
+        target = importlib.import_module(target_name)
+    except ImportError:
+        return None
+    sys.modules[alias_name] = target
+    return target

@@ -7,7 +7,10 @@ from typing import Any
 import numpy as np
 
 from yolo_frigate.prediction import Prediction, Predictions
-from yolo_frigate.ultralytics_support import import_ultralytics_yoloe
+from yolo_frigate.ultralytics_support import (
+    ensure_tensorrt_namespace,
+    import_ultralytics_yoloe,
+)
 
 
 class UltralyticsDetector:
@@ -28,6 +31,8 @@ class UltralyticsDetector:
         self.requested_device = device
 
         self._validate_runtime_device()
+        if self.runtime == "tensorrt":
+            ensure_tensorrt_namespace()
         self.model = import_ultralytics_yoloe()(model)
         self._predict_lock = asyncio.Lock()
 

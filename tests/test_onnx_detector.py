@@ -66,6 +66,22 @@ class TestUltralyticsDetector(unittest.TestCase):
         self.assertEqual(predictions.predictions[0].x_max, 30.0)
         self.assertTrue(predictions.success)
 
+    def test_tensorrt_runtime_ensures_import_namespace(self):
+        ultralytics_module = types.SimpleNamespace(YOLOE=FakeYOLOE)
+        with (
+            unittest.mock.patch.dict(sys.modules, {"ultralytics": ultralytics_module}),
+            unittest.mock.patch(
+                "yolo_frigate.ultralytics_detector.ensure_tensorrt_namespace"
+            ) as ensure_tensorrt_namespace,
+        ):
+            UltralyticsDetector(
+                "model.engine",
+                runtime="tensorrt",
+                device="gpu:1",
+            )
+
+        ensure_tensorrt_namespace.assert_called_once_with()
+
     def test_explicit_class_names_override_result_names(self):
         ultralytics_module = types.SimpleNamespace(YOLOE=FakeYOLOE)
         with unittest.mock.patch.dict(sys.modules, {"ultralytics": ultralytics_module}):
